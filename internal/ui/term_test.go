@@ -120,3 +120,21 @@ func TestKeyBytes(t *testing.T) {
 		}
 	}
 }
+
+func TestAutoUpdateGate(t *testing.T) {
+	store, _ := cache.OpenDir(t.TempDir())
+	newModel := func(version string) *Model {
+		return New(app.New(store, "test"), []provider.Provider{fake{}}, Options{ImageMode: img.Off, Dir: "/", Version: version})
+	}
+	if newModel("dev").autoUpdate() != nil {
+		t.Error("dev builds must not check for updates")
+	}
+	m := newModel("0.1.0")
+	m.cfg.NoAutoUpdate = true
+	if m.autoUpdate() != nil {
+		t.Error("disabled in settings, still checking")
+	}
+	if newModel("0.1.0").autoUpdate() == nil {
+		t.Error("release builds must check on every launch")
+	}
+}

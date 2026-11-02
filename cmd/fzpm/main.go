@@ -25,7 +25,9 @@ import (
 	_ "fzpm/internal/provider/nuxt"
 )
 
-const version = "0.1.0"
+// version is set by GoReleaser; local builds are "dev" and never update
+// themselves.
+var version = "dev"
 
 func main() {
 	if err := run(); err != nil {
@@ -100,6 +102,7 @@ func run() error {
 		Dark:      lipgloss.HasDarkBackground(),
 		Dir:       dir,
 		Config:    cfg,
+		Version:   version,
 	})
 	_, err = tea.NewProgram(m, tea.WithAltScreen(), tea.WithReportFocus()).Run()
 	return err

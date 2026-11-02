@@ -63,6 +63,8 @@ func (m *Model) options() []option {
 			!m.cfg.SkipPrompt, func() { m.cfg.SkipPrompt = !m.cfg.SkipPrompt }},
 		{"Nerd Font icons for plugins", "off: show plugin names",
 			!m.cfg.TextIcons, func() { m.cfg.TextIcons = !m.cfg.TextIcons }},
+		{"Update fzpm automatically", "checks GitHub releases at every launch",
+			!m.cfg.NoAutoUpdate, func() { m.cfg.NoAutoUpdate = !m.cfg.NoAutoUpdate }},
 	}
 }
 

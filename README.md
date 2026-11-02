@@ -56,6 +56,11 @@ fzpm [flags] [query]
   fzpm --provider drupal
 ```
 
+## Install
+
+Download the archive for your platform from the
+[latest release](https://github.com/woldtwerk/fzpm/releases/latest).
+
 Build: `go build -o fzpm ./cmd/fzpm` (Go ≥ 1.22).
 
 ## How it works
@@ -149,5 +154,5 @@ unchanged. `Actions()[0]` is bound to `i`, `Actions()[1]` to `I`.
 ## Third-party licenses
 
 All dependencies use permissive licenses: bubbletea, bubbles, lipgloss,
-glamour, sahilm/fuzzy, html-to-markdown, go-osc52 (MIT); yaml.v3 (MIT/Apache-2.0); goquery,
+glamour, sahilm/fuzzy, html-to-markdown, go-osc52, creack/pty, charmbracelet/x/vt (MIT); yaml.v3 (MIT/Apache-2.0); goquery,
 golang.org/x/image, golang.org/x/sync (BSD-3-Clause). See `go.mod`.

@@ -44,6 +44,7 @@ type Options struct {
 	Dark      bool
 	Dir       string
 	Config    *config.Config // nil: settings are not persisted
+	Version   string         // running fzpm release, for automatic updates
 	// Available lists all providers for the settings pane (default: all
 	// registered providers).
 	Available []provider.Provider
@@ -258,7 +259,7 @@ func (m *Model) Init() tea.Cmd {
 	if m.indexing > 0 {
 		cmds = append(cmds, m.waitEvent(), m.spin())
 	}
-	cmds = append(cmds, m.queryChanged(), m.loadLocal())
+	cmds = append(cmds, m.queryChanged(), m.loadLocal(), m.autoUpdate())
 	return tea.Batch(cmds...)
 }
 

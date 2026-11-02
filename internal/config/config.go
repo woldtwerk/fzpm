@@ -20,6 +20,8 @@ type Config struct {
 	SkipPrompt bool `json:"skip_no_project_prompt,omitempty"`
 	// TextIcons shows provider names instead of Nerd Font icons.
 	TextIcons bool `json:"text_icons,omitempty"`
+	// NoAutoUpdate stops fzpm from installing new releases at launch.
+	NoAutoUpdate bool `json:"no_auto_update,omitempty"`
 
 	path string
 }
