@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.2.0](https://github.com/woldtwerk/fzpm/compare/v0.1.0...v0.2.0) (2026-11-02)
+
+
+### Features
+
+* :sparkles: add a TYPO3 extension provider ([52ea964](https://github.com/woldtwerk/fzpm/commit/52ea964970b92aa676ddeb5e52703c5e8389c02d))
+* :sparkles: add generic Packagist and npm providers ([db4cb72](https://github.com/woldtwerk/fzpm/commit/db4cb723f7165df758cab816eb40c3df84120447))
+* :sparkles: scope the search to one plugin with /&lt;plugin&gt; ([3cf87c8](https://github.com/woldtwerk/fzpm/commit/3cf87c8421f6e6e63d801f21426a178d6dd846d0))
+* :sparkles: scope to any enabled plugin with /&lt;plugin&gt;, active or not ([a162bef](https://github.com/woldtwerk/fzpm/commit/a162befbc09ee24818ab65ecab6bdb5a70d12995))
+
 ## 0.1.0 (2026-11-02)
 
 
