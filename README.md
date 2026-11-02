@@ -18,6 +18,10 @@ based; included providers:
 Inside a project the matching provider is enabled automatically; elsewhere
 fzpm asks which one to search (single key).
 
+**Scope**: with several plugins active, start the query with `/<plugin>` to
+search only that one, e.g. `/typo3 news` (a unique prefix like `/ty news` is
+enough).
+
 **Multi-select**: `Space` marks a row (`Ctrl-Space` while typing), `Tab` marks
 it and moves down a line. Marks are kept while you change the query. `i`
 installs, `e` installs and enables (`Alt-i` / `Alt-e` while typing) all marked

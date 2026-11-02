@@ -149,7 +149,7 @@ type Model struct {
 func New(svc *app.Service, provs []provider.Provider, opts Options) *Model {
 	ti := textinput.New()
 	ti.Prompt = "❯ "
-	ti.Placeholder = "search " + providerNames(provs) + "…"
+	ti.Placeholder = searchPlaceholder(provs)
 	ti.SetValue(opts.Query)
 	ti.Focus()
 
@@ -196,6 +196,16 @@ func providerNames(provs []provider.Provider) string {
 		names[i] = p.Name()
 	}
 	return strings.Join(names, ", ")
+}
+
+// searchPlaceholder names the providers searched and, with several, how to
+// search a single one.
+func searchPlaceholder(provs []provider.Provider) string {
+	s := "search " + providerNames(provs) + "…"
+	if len(provs) > 1 {
+		s += " (/" + provs[0].Name() + " to search one only)"
+	}
+	return s
 }
 
 // Messages.
@@ -334,7 +344,18 @@ func (m *Model) refilter(keepSelection bool) {
 	if keepSelection && m.cursor < len(m.results) {
 		sel = key(m.results[m.cursor])
 	}
-	m.results = search.Rank(m.input.Value(), m.tabSource(), resultLimit)
+	scope, q := scopeQuery(m.provs, m.input.Value())
+	src := m.tabSource()
+	if scope != "" {
+		scoped := make([]provider.Package, 0, len(src))
+		for _, p := range src {
+			if p.Provider == scope {
+				scoped = append(scoped, p)
+			}
+		}
+		src = scoped
+	}
+	m.results = search.Rank(q, src, resultLimit)
 	m.cursor = 0
 	if sel != "" {
 		for i, p := range m.results {
@@ -594,26 +615,58 @@ func (m *Model) quit() (tea.Model, tea.Cmd) {
 func (m *Model) queryChanged() tea.Cmd {
 	m.refilter(false)
 	m.searchSeq++
-	seq, q := m.searchSeq, strings.TrimSpace(m.input.Value())
-	if len([]rune(q)) < remoteMinLen || m.remoteDone[q] {
+	seq, raw := m.searchSeq, strings.TrimSpace(m.input.Value())
+	if _, q := scopeQuery(m.provs, raw); len([]rune(q)) < remoteMinLen || m.remoteDone[raw] {
 		return m.schedulePrefetch()
 	}
 	return tea.Batch(m.schedulePrefetch(), tea.Tick(remoteDelay, func(time.Time) tea.Msg {
-		return remoteTickMsg{seq, q}
+		return remoteTickMsg{seq, raw}
 	}))
 }
 
-func (m *Model) remoteSearch(q string) tea.Cmd {
-	m.remoteDone[q] = true
+// remoteSearch sends the query (without a /provider scope) to the scoped
+// provider, or to all of them.
+func (m *Model) remoteSearch(raw string) tea.Cmd {
+	m.remoteDone[raw] = true
+	scope, q := scopeQuery(m.provs, raw)
 	var cmds []tea.Cmd
 	for _, p := range m.provs {
+		if scope != "" && p.Name() != scope {
+			continue
+		}
 		m.searching++
 		cmds = append(cmds, func() tea.Msg {
 			pkgs, err := m.svc.Search(m.ctx, p, q)
-			return remoteMsg{q, pkgs, err}
+			return remoteMsg{raw, pkgs, err}
 		})
 	}
 	return tea.Batch(append(cmds, m.spin())...)
+}
+
+// scopeQuery splits a leading "/<provider>" off the query when several
+// providers are active: "/typo3 news" searches only TYPO3 for "news". A
+// unique prefix is enough ("/ty news"), and while only the scope is typed
+// the query is empty.
+func scopeQuery(provs []provider.Provider, raw string) (scope, q string) {
+	if len(provs) < 2 || !strings.HasPrefix(raw, "/") {
+		return "", raw
+	}
+	word, rest, _ := strings.Cut(raw[1:], " ")
+	for _, p := range provs {
+		if p.Name() == word {
+			return word, strings.TrimLeft(rest, " ")
+		}
+		if word != "" && strings.HasPrefix(p.Name(), word) {
+			if scope != "" {
+				return "", raw // ambiguous
+			}
+			scope = p.Name()
+		}
+	}
+	if scope == "" {
+		return "", raw
+	}
+	return scope, strings.TrimLeft(rest, " ")
 }
 
 func (m *Model) schedulePrefetch() tea.Cmd {

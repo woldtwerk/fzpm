@@ -628,3 +628,33 @@ func TestDisableRemove(t *testing.T) {
 		t.Errorf("d on package not in project: %q", m.status)
 	}
 }
+
+func TestScopeQuery(t *testing.T) {
+	provs := []provider.Provider{fake{}, fake2{}}
+	for raw, want := range map[string][2]string{
+		"lodash":        {"", "lodash"},
+		"/fake2 zebra":  {"fake2", "zebra"},
+		"/fake lodash":  {"fake", "lodash"}, // exact name wins over prefix
+		"/fake2":        {"fake2", ""},
+		"/fa zebra":     {"", "/fa zebra"}, // ambiguous prefix
+		"/nope x":       {"", "/nope x"},
+		"/fake2   left": {"fake2", "left"},
+	} {
+		if scope, q := scopeQuery(provs, raw); scope != want[0] || q != want[1] {
+			t.Errorf("scopeQuery(%q) = %q, %q; want %q, %q", raw, scope, q, want[0], want[1])
+		}
+	}
+	if scope, q := scopeQuery(provs[:1], "/fake lodash"); scope != "" || q != "/fake lodash" {
+		t.Errorf("single provider scoped: %q, %q", scope, q)
+	}
+
+	store, _ := cache.OpenDir(t.TempDir())
+	m := New(app.New(store, "test"), provs, Options{ImageMode: img.Off, Dir: "/"})
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	drain(t, m, m.Init(), 0)
+	m.input.SetValue("/fake2")
+	m.refilter(false)
+	if len(m.results) != 1 || m.results[0].ID != "zebra" {
+		t.Errorf("scoped results = %+v", m.results)
+	}
+}

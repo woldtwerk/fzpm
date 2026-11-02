@@ -140,7 +140,7 @@ func (m *Model) setTab(t tab) tea.Cmd {
 
 func (m *Model) updatePlaceholder() {
 	m.input.Placeholder = map[tab]string{
-		tabSearch:      "search " + providerNames(m.provs) + "…",
+		tabSearch:      searchPlaceholder(m.provs),
 		tabInstalled:   "filter installed modules…",
 		tabUninstalled: "filter uninstalled modules…",
 	}[m.tab]
