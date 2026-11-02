@@ -80,6 +80,20 @@ func (n *Nuxt) Local(ctx context.Context, c *http.Client, proj provider.Project)
 	return out, nil
 }
 
+// basePackage strips a subpath from an npm module specifier:
+// "@scope/pkg/nuxt" → "@scope/pkg", "pkg/nuxt" → "pkg". Paths and aliases
+// are returned as they are.
+func basePackage(spec string) string {
+	if strings.HasPrefix(spec, ".") || strings.HasPrefix(spec, "/") || strings.HasPrefix(spec, "~") {
+		return spec
+	}
+	parts := strings.SplitN(spec, "/", 3)
+	if strings.HasPrefix(spec, "@") && len(parts) >= 2 {
+		return parts[0] + "/" + parts[1]
+	}
+	return parts[0]
+}
+
 func installedVersion(root, name string) string {
 	var p struct {
 		Version string `json:"version"`
@@ -99,7 +113,8 @@ var (
 
 // configModules extracts the module names listed in nuxt.config's top-level
 // `modules` array. It is a text scan, not a JS parser: module names must be
-// string literals (the common case).
+// string literals (the common case). Entries pointing into a package
+// ("@vercel/analytics/nuxt") also mark the package itself.
 func configModules(root string) map[string]bool {
 	out := map[string]bool{}
 	for _, name := range []string{"nuxt.config.ts", "nuxt.config.js", "nuxt.config.mjs", "nuxt.config.mts"} {
@@ -128,6 +143,7 @@ func configModules(root string) map[string]bool {
 		}
 		for _, m := range quotedRe.FindAllStringSubmatch(src[loc[1]:end], -1) {
 			out[m[1]] = true
+			out[basePackage(m[1])] = true
 		}
 		return out
 	}

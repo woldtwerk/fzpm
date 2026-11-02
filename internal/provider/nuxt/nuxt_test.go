@@ -70,7 +70,7 @@ func TestDetectAndActions(t *testing.T) {
 func TestLocal(t *testing.T) {
 	root := t.TempDir()
 	write(t, root, "package.json", `{
-		"dependencies": {"nuxt": "^4", "@nuxt/image": "^2.0.0", "vue": "^3", "@pinia/nuxt": "^0.11", "nuxt-og-image": "^5"},
+		"dependencies": {"nuxt": "^4", "@nuxt/image": "^2.0.0", "vue": "^3", "@pinia/nuxt": "^0.11", "nuxt-og-image": "^5", "@vercel/speed-insights": "2.0.0", "@vercel/analytics": "^1"},
 		"devDependencies": {"@nuxt/eslint": "^1", "some-module": "^1", "@nuxt/kit": "^4"}
 	}`)
 	write(t, root, "nuxt.config.ts", `export default defineNuxtConfig({
@@ -78,6 +78,8 @@ func TestLocal(t *testing.T) {
   modules: [
     '@nuxt/image',
     ['@pinia/nuxt', { autoImports: ['defineStore'] }],
+    '@vercel/speed-insights/nuxt',
+    "@vercel/analytics/nuxt",
     /* 'nuxt-og-image', */
   ],
   image: { provider: 'ipx' },
@@ -114,6 +116,9 @@ func TestLocal(t *testing.T) {
 	check("nuxt-og-image", "og-image", "community", false, "") // listed, config entry commented out
 	check("@nuxt/eslint", "eslint", "official", false, "")     // listed, not configured
 	check("./modules/my-local", "my-local", "custom", true, "")
+	// Registered through a subpath export (package/nuxt).
+	check("@vercel/speed-insights", "@vercel/speed-insights", "npm", true, "2.0.0")
+	check("@vercel/analytics", "@vercel/analytics", "npm", true, "^1")
 	// Not on nuxt.com and not configured: not a module, whatever it depends on.
 	for _, not := range []string{"some-module", "nuxt", "vue", "@nuxt/kit", "defineStore", "ipx"} {
 		if _, ok := got[not]; ok {
