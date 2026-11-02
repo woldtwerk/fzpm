@@ -3,6 +3,9 @@
 Fast terminal UI to fuzzy-search and install packages. The core is provider
 based; included providers:
 
+[fzpm.webm](https://github.com/user-attachments/assets/fe29ce06-00d2-4bd4-819e-fa90f6b9814f)
+
+
 | | Drupal | Nuxt |
 |---|---|---|
 | Project detection | `composer.json` requiring `drupal/core*` (ddev if `.ddev/`) | `package.json` depending on `nuxt` (package manager from the lockfile) |
