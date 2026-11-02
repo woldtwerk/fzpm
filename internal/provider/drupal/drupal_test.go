@@ -111,6 +111,26 @@ func TestDetectAndActions(t *testing.T) {
 	if got := strings.Join(cmds[0].Args, " "); got != "ddev drush en token token_view -y" {
 		t.Errorf("batch enable = %q", got)
 	}
+	tokenMods := []provider.LocalPackage{
+		{Package: provider.Package{ID: "token"}, Module: "token", Origin: "contrib"},
+		{Package: provider.Package{ID: "token"}, Module: "token_view", Origin: "contrib"},
+	}
+	cmds, _ = d.DisableCommands(tokenMods, proj)
+	if got := strings.Join(cmds[0].Args, " "); got != "ddev drush pmu token token_view -y" {
+		t.Errorf("disable = %q", got)
+	}
+	cmds, _ = d.RemoveCommands(tokenMods, proj)
+	if got := strings.Join(cmds[0].Args, " "); got != "ddev composer remove drupal/token" {
+		t.Errorf("remove = %q", got)
+	}
+	for _, lp := range []provider.LocalPackage{
+		{Package: provider.Package{ID: "drupal"}, Module: "node", Origin: "core"},
+		{Module: "mine", Origin: "custom"},
+	} {
+		if _, err := d.RemoveCommands([]provider.LocalPackage{lp}, proj); err == nil {
+			t.Errorf("removing %s code must fail", lp.Origin)
+		}
+	}
 
 	if _, err := d.Actions()[0].Commands([]provider.Package{{ID: "token"}, {ID: "token; rm -rf /"}}, "", proj); err == nil {
 		t.Error("expected invalid name error")

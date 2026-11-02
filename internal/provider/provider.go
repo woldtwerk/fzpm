@@ -134,6 +134,20 @@ type Lister interface {
 	EnableCommands(lps []LocalPackage, proj Project) ([]*exec.Cmd, error)
 }
 
+// Disabler is optionally implemented by Listers that can turn enabled
+// packages off again, keeping their code in the project.
+type Disabler interface {
+	DisableCommands(lps []LocalPackage, proj Project) ([]*exec.Cmd, error)
+}
+
+// Remover is optionally implemented by Listers that can take packages out
+// of the project's codebase. The UI disables enabled packages first and
+// refuses when the upstream package (Package.ID) still has other enabled
+// modules.
+type Remover interface {
+	RemoveCommands(lps []LocalPackage, proj Project) ([]*exec.Cmd, error)
+}
+
 var (
 	mu       sync.RWMutex
 	registry = map[string]Provider{}

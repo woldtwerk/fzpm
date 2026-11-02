@@ -164,6 +164,10 @@ func (m *Model) normalKey(k string) (tea.Model, tea.Cmd) {
 		return m, m.runAction(0)
 	case "e", "I":
 		return m, m.runAction(1)
+	case "d":
+		return m, m.disableAction(false)
+	case "D":
+		return m, m.disableAction(true)
 	case " ", "ctrl+@":
 		return m, m.toggleMark(false)
 	case "tab":
@@ -216,6 +220,10 @@ func (m *Model) detailKey(k string, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.runAction(0)
 	case "e", "I", "alt+e", "alt+I":
 		return m, m.runAction(1)
+	case "d":
+		return m, m.disableAction(false)
+	case "D":
+		return m, m.disableAction(true)
 	case "y":
 		return m, m.yank()
 	case "o":

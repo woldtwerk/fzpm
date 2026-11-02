@@ -547,3 +547,84 @@ func TestMultiSelect(t *testing.T) {
 }
 
 var errTest = errors.New("boom")
+
+func (fake) DisableCommands(lps []provider.LocalPackage, _ provider.Project) ([]*exec.Cmd, error) {
+	return []*exec.Cmd{exec.Command("true", "disable")}, nil
+}
+func (fake) RemoveCommands(lps []provider.LocalPackage, _ provider.Project) ([]*exec.Cmd, error) {
+	for _, lp := range lps {
+		if lp.ID == "" {
+			return nil, errors.New(lp.Module + " is custom code")
+		}
+	}
+	return []*exec.Cmd{exec.Command("true", "remove")}, nil
+}
+
+func TestDisableRemove(t *testing.T) {
+	store, _ := cache.OpenDir(t.TempDir())
+	m := New(app.New(store, "test"), []provider.Provider{fake{}}, Options{ImageMode: img.Off, Dir: "/"})
+	m.Update(tea.WindowSizeMsg{Width: 140, Height: 30})
+	drain(t, m, m.Init(), 0)
+	m.Update(press("esc"))
+	at := func(id string) {
+		for i, p := range m.results {
+			if p.ID == id {
+				m.cursor = i
+				return
+			}
+		}
+		t.Fatalf("%s not in results %+v", id, m.results)
+	}
+
+	// Removing lodash_fp would take the lodash package away while its
+	// module lodash is still enabled.
+	m.Update(press("3"))
+	at("lodash_fp")
+	if _, cmd := m.Update(press("D")); cmd != nil || !strings.Contains(m.status, "lodash is still enabled") {
+		t.Fatalf("blocked removal: cmd=%v status=%q", cmd != nil, m.status)
+	}
+	at("mine")
+	if _, cmd := m.Update(press("D")); cmd != nil || !strings.Contains(m.status, "custom code") {
+		t.Fatalf("custom removal: status=%q", m.status)
+	}
+
+	// d runs right away.
+	m.Update(press("2"))
+	at("lodash")
+	if _, cmd := m.Update(press("d")); cmd == nil || m.status != "disable lodash…" {
+		t.Fatalf("disable: cmd=%v status=%q", cmd != nil, m.status)
+	}
+	// Disabled modules move to Uninstalled before the project files change.
+	_, cmd := m.Update(execDoneMsg{label: "disable", what: "lodash", disabled: []provider.Package{{Provider: "fake", ID: "lodash"}}})
+	drain(t, m, cmd, 0)
+	if m.count(tabInstalled) != 0 || m.count(tabUninstalled) != 3 {
+		t.Fatalf("after disable: installed=%d uninstalled=%d", m.count(tabInstalled), m.count(tabUninstalled))
+	}
+	m.Update(press("d"))
+	if !strings.Contains(m.status, "not in the project") && !strings.Contains(m.status, "not enabled") {
+		t.Errorf("disable with nothing enabled: %q", m.status)
+	}
+
+	// Now lodash_fp can be removed (nothing to disable: label "remove").
+	m.Update(press("3"))
+	at("lodash_fp")
+	if _, cmd := m.Update(press("D")); cmd == nil || m.status != "remove lodash_fp…" {
+		t.Fatalf("remove: %q", m.status)
+	}
+
+	// On Search, D covers every local module of the package, and the
+	// marked rows when there are any.
+	m.enabledNow = map[string]bool{}
+	_, cmd = m.Update(execDoneMsg{label: "reload"})
+	drain(t, m, cmd, 0)
+	m.Update(press("1"))
+	at("lodash")
+	if _, cmd := m.Update(press("D")); cmd == nil || m.status != "disable + remove lodash, lodash_fp…" {
+		t.Fatalf("search D: %q", m.status)
+	}
+	at("left-pad")
+	m.Update(press("d"))
+	if m.status != "not in the project" {
+		t.Errorf("d on package not in project: %q", m.status)
+	}
+}

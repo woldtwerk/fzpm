@@ -77,8 +77,8 @@ func (m *Model) applyLocal(msg localMsg) {
 	}
 	m.local = append(kept, msg.list...)
 	for i, lp := range m.local {
-		if m.enabledNow[lp.Provider+"/"+lp.Module] {
-			m.local[i].Enabled = true
+		if on, ok := m.enabledNow[lp.Provider+"/"+lp.Module]; ok {
+			m.local[i].Enabled = on
 		}
 	}
 	m.rebuildLocalMaps()
@@ -205,7 +205,7 @@ func (m *Model) enableLocal(lps []provider.LocalPackage, batch bool) tea.Cmd {
 		}
 		all = append(all, cmds...)
 	}
-	return m.execute("enable", all, pkgs, pkgs, batch)
+	return m.execute(all, pkgs, execDoneMsg{label: "enable", enabled: pkgs, batch: batch})
 }
 
 func (m *Model) tabBar() string {

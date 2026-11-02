@@ -281,3 +281,35 @@ func (Drupal) EnableCommands(lps []provider.LocalPackage, proj provider.Project)
 	}
 	return []*exec.Cmd{drushEn(proj, modules)}, nil
 }
+
+// DisableCommands uninstalls (in Drupal terms) enabled modules with a single
+// drush pmu. This removes the modules' configuration and data from the site.
+func (Drupal) DisableCommands(lps []provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
+	modules := make([]string, len(lps))
+	for i, lp := range lps {
+		if !validID.MatchString(lp.Module) {
+			return nil, fmt.Errorf("invalid module name %q", lp.Module)
+		}
+		modules[i] = lp.Module
+	}
+	return []*exec.Cmd{drushCmd(proj, append(append([]string{"pmu"}, modules...), "-y")...)}, nil
+}
+
+// RemoveCommands removes the modules' drupal.org projects with a single
+// composer remove. Core and custom modules are not composer packages.
+func (Drupal) RemoveCommands(lps []provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
+	args, seen := []string{"remove"}, map[string]bool{}
+	for _, lp := range lps {
+		if lp.Origin != "contrib" || lp.ID == "" {
+			return nil, fmt.Errorf("%s is %s code; it cannot be removed with composer", lp.Module, lp.Origin)
+		}
+		if !validID.MatchString(lp.ID) {
+			return nil, fmt.Errorf("invalid project name %q", lp.ID)
+		}
+		if !seen[lp.ID] {
+			seen[lp.ID] = true
+			args = append(args, "drupal/"+lp.ID)
+		}
+	}
+	return []*exec.Cmd{tool(proj, "composer", args...)}, nil
+}

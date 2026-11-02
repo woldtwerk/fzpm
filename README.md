@@ -11,7 +11,8 @@ based; included providers:
 | Project detection | `composer.json` requiring `drupal/core*` (ddev if `.ddev/`) | `package.json` depending on `nuxt` (package manager from the lockfile) |
 | Index | top 1000 by installs + newest + recently changed (drupal.org) | all modules on nuxt.com (one request); weekly downloads from [npmx.dev](https://npmx.dev) (nuxt.com's counts are mostly missing) |
 | Details | project page + release history | npm registry (README, versions) + nuxt.com (maintainers, category, compatibility, links) |
-| `i` / `I` | `composer require` / + `drush en` | `nuxi module add --skipConfig` / `nuxi module add` |
+| `i` / `e` (or `I`) | `composer require` / + `drush en` | `nuxi module add --skipConfig` / `nuxi module add` |
+| `d` / `D` | `drush pmu` / + `composer remove` | `nuxi module remove --skipInstall` / + `nuxi module remove --skipConfig` |
 | Installed / Uninstalled | `core.extension.yml` / `*.info.yml` + `composer.json` | `modules: [...]` in `nuxt.config` + `./modules` / `package.json` dependencies that are listed on [nuxt.com/modules](https://nuxt.com/modules) (or registered in `nuxt.config`) |
 
 Inside a project the matching provider is enabled automatically; elsewhere
@@ -23,6 +24,14 @@ installs, `e` installs and enables (`Alt-i` / `Alt-e` while typing) all marked
 rows with one batched command per plugin (e.g.
 `composer require drupal/a drupal/b` + `drush en a b -y`, or
 `nuxi module add a b`). On *Uninstalled*, they enable all selected modules. `Esc` clears the marks, and so does switching tabs.
+
+**Disable / remove** (normal mode and detail page): `d`
+disables, `D` disables and removes the code from the project, for the marked
+rows or the row under the cursor. On *Search* a row stands for all of the
+package's modules in the project. Removing is refused while another module of
+the same package is still enabled, and for core or custom code. Disabled
+modules are shown as uninstalled right away (Drupal: `core.extension.yml`
+changes after `drush cex`).
 
 **Plugins pane** (`,`; `Alt-,` while typing): `Space` enables/disables a
 provider (saved in `~/.config/fzpm/config.json`; disabled providers

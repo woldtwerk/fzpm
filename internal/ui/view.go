@@ -171,11 +171,11 @@ func (m *Model) footer() string {
 func (m *Model) hint() string {
 	switch {
 	case m.screen == screenDetail:
-		return "i install  e +enable  n/N version  ]r releases  r reload  h back  ? help"
+		return "i install  e +enable  d/D disable/remove  n/N version  ]r releases  r reload  h back  ? help"
 	case m.insert:
 		return "⏎ details  tab mark  M-i install  M-e +enable  esc normal  ? (normal) help"
 	default:
-		return "i install  e +enable  ␣/tab mark  l details  / search  r refresh  , plugins  ? help"
+		return "i install  e +enable  d/D disable/remove  ␣/tab mark  l details  / search  r refresh  , plugins  ? help"
 	}
 }
 
@@ -195,7 +195,8 @@ const helpText = `fzpm — keys
    H/L              top/bottom of screen    l, ⏎                details
    i                install                 e, I                install + enable
    space            mark row                tab                 mark row + move down
-                    (i / e then act on all marked rows)
+   d                disable                 D                   disable + remove
+                    (i / e / d / D act on all marked rows)
    esc              clear marks
    y                yank command            o                   open in browser
    /, a             search (insert)         S                   clear & search
@@ -211,6 +212,7 @@ const helpText = `fzpm — keys
    J/K              scroll sidebar
    n/N              select next/prev release (install uses its version)
    i / e            install / + enable      p                   toggle images
+   d / D            disable / + remove
    r                reload from source      y, o                yank, open
    h, esc, q        back
 

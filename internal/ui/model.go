@@ -75,8 +75,9 @@ type Model struct {
 	present      map[string]bool                  // provider/project -> any module enabled
 	localLoading int
 	detailLocal  *provider.LocalPackage // local package a detail page was opened from
-	// enabledNow holds modules enabled in this session (provider/module);
-	// project files only reflect that after a config export.
+	// enabledNow holds modules enabled (true) or disabled (false) in this
+	// session (provider/module); project files only reflect that after a
+	// config export.
 	enabledNow map[string]bool
 	// marked holds rows selected for a batch install/enable (key -> row).
 	// Rows of the current tab only; switching tabs clears it.
@@ -226,9 +227,11 @@ type (
 		label string
 		what  string // package names, for the status line
 		err   error
-		// enabled lists modules turned on by this action (ID = local module).
-		enabled []provider.Package
-		batch   bool // ran for the marked rows
+		// enabled / disabled list modules turned on / off by this action
+		// (ID = local module).
+		enabled  []provider.Package
+		disabled []provider.Package
+		batch    bool // ran for the marked rows
 	}
 	statusMsg struct {
 		text string
@@ -501,18 +504,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case execDoneMsg:
-		if msg.err != nil {
-			m.setStatus(fmt.Sprintf("✗ %s %s failed: %v", msg.label, msg.what, msg.err), true)
-		} else {
-			m.setStatus(fmt.Sprintf("✓ %s: %s", msg.label, msg.what), false)
-			for _, p := range msg.enabled {
-				m.enabledNow[key(p)] = true
-			}
-			if msg.batch { // keep the selection on failure so it can be retried
-				clear(m.marked)
-			}
-		}
-		return m, m.loadLocal()
+		return m, m.finishExec(msg)
 
 	case statusMsg:
 		m.setStatus(msg.text, msg.err)
@@ -728,7 +720,7 @@ func (m *Model) runAction(n int) tea.Cmd {
 	if a.Enables {
 		enabled = []provider.Package{pkg}
 	}
-	return m.execute(a.Label, cmds, []provider.Package{pkg}, enabled, false)
+	return m.execute(cmds, []provider.Package{pkg}, execDoneMsg{label: a.Label, enabled: enabled})
 }
 
 // runMarked runs action n for all marked rows: on Search one batched
@@ -778,20 +770,45 @@ func (m *Model) runMarked(n int) tea.Cmd {
 			enabled = append(enabled, group...)
 		}
 	}
-	return m.execute(label, all, rows, enabled, true)
+	return m.execute(all, rows, execDoneMsg{label: label, enabled: enabled, batch: true})
 }
 
-// execute hands the terminal to cmds and reports back with execDoneMsg.
-func (m *Model) execute(label string, cmds []*exec.Cmd, pkgs, enabled []provider.Package, batch bool) tea.Cmd {
+// execute hands the terminal to cmds for pkgs and reports back with done
+// (what and err filled in).
+func (m *Model) execute(cmds []*exec.Cmd, pkgs []provider.Package, done execDoneMsg) tea.Cmd {
+	done.what = pkgNames(pkgs)
+	m.setStatus(done.label+" "+done.what+"…", false)
+	return tea.Exec(&runner.Seq{Cmds: cmds}, func(err error) tea.Msg {
+		done.err = err
+		return done
+	})
+}
+
+// finishExec records the result of an action and re-reads the project.
+func (m *Model) finishExec(msg execDoneMsg) tea.Cmd {
+	if msg.err != nil {
+		m.setStatus(fmt.Sprintf("✗ %s %s failed: %v", msg.label, msg.what, msg.err), true)
+		return m.loadLocal()
+	}
+	m.setStatus(fmt.Sprintf("✓ %s: %s", msg.label, msg.what), false)
+	for _, p := range msg.enabled {
+		m.enabledNow[key(p)] = true
+	}
+	for _, p := range msg.disabled {
+		m.enabledNow[key(p)] = false
+	}
+	if msg.batch { // keep the selection on failure so it can be retried
+		clear(m.marked)
+	}
+	return m.loadLocal()
+}
+
+func pkgNames(pkgs []provider.Package) string {
 	ids := make([]string, len(pkgs))
 	for i, p := range pkgs {
 		ids[i] = p.ID
 	}
-	what := strings.Join(ids, ", ")
-	m.setStatus(label+" "+what+"…", false)
-	return tea.Exec(&runner.Seq{Cmds: cmds}, func(err error) tea.Msg {
-		return execDoneMsg{label: label, what: what, err: err, enabled: enabled, batch: batch}
-	})
+	return strings.Join(ids, ", ")
 }
 
 // toggleMark selects/deselects the row under the cursor for a batch action,

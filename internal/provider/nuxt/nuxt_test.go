@@ -50,6 +50,18 @@ func TestDetectAndActions(t *testing.T) {
 	if _, err := n.Actions()[0].Commands([]provider.Package{{ID: "@nuxt/ui"}, {ID: "x; rm -rf /"}}, "", proj); err == nil {
 		t.Error("expected invalid name error")
 	}
+	rm := []provider.LocalPackage{{Package: provider.Package{ID: "@nuxt/image"}, Module: "@nuxt/image"}, {Package: provider.Package{ID: "@nuxt/ui"}, Module: "@nuxt/ui"}}
+	cmds, _ = n.DisableCommands(rm, proj)
+	if got := strings.Join(cmds[0].Args, " "); got != "pnpm dlx nuxi@latest module remove @nuxt/image @nuxt/ui --skipInstall" || cmds[0].Dir != root {
+		t.Errorf("disable cmd = %q", got)
+	}
+	cmds, _ = n.RemoveCommands(rm, proj)
+	if got := strings.Join(cmds[0].Args, " "); got != "pnpm dlx nuxi@latest module remove @nuxt/image @nuxt/ui --skipConfig" {
+		t.Errorf("remove cmd = %q", got)
+	}
+	if _, err := n.DisableCommands([]provider.LocalPackage{{Module: "./modules/mine"}}, proj); err == nil {
+		t.Error("disabling a local module must fail")
+	}
 	if _, ok := n.Detect(t.TempDir()); ok {
 		t.Error("detected nuxt in empty dir")
 	}

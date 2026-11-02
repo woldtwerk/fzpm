@@ -142,3 +142,30 @@ func (*Nuxt) EnableCommands(lps []provider.LocalPackage, proj provider.Project) 
 	}
 	return nuxiAdd(modules, "", proj, "--skipInstall")
 }
+
+// DisableCommands takes modules out of nuxt.config, keeping the packages.
+func (*Nuxt) DisableCommands(lps []provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
+	return nuxiRemove(lps, proj, "--skipInstall")
+}
+
+// RemoveCommands uninstalls the modules' packages (the UI disables enabled
+// ones first).
+func (*Nuxt) RemoveCommands(lps []provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
+	return nuxiRemove(lps, proj, "--skipConfig")
+}
+
+func nuxiRemove(lps []provider.LocalPackage, proj provider.Project, flag string) ([]*exec.Cmd, error) {
+	args := []string{"module", "remove"}
+	for _, lp := range lps {
+		if lp.ID == "" {
+			return nil, fmt.Errorf("%s is custom code; remove it by hand", lp.Module)
+		}
+		if !validNpm.MatchString(lp.ID) {
+			return nil, fmt.Errorf("invalid package name %q", lp.ID)
+		}
+		args = append(args, lp.ID)
+	}
+	c := runner(proj.Data["pm"], append(args, flag)...)
+	c.Dir = proj.Root
+	return []*exec.Cmd{c}, nil
+}
