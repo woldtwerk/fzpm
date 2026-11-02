@@ -108,6 +108,9 @@ func (m *Model) active(name string) bool { return m.provider(name) != nil }
 // toggleEnabled switches the saved setting; enabling also activates.
 func (m *Model) toggleEnabled(p provider.Provider) tea.Cmd {
 	name := p.Name()
+	if name == m.scopedOn {
+		m.scopedOn = "" // the user decides now
+	}
 	if !m.cfg.Enabled(name) {
 		m.saveConfig(name, true)
 		m.setStatus(name+" enabled", false)
@@ -132,6 +135,9 @@ func (m *Model) toggleEnabled(p provider.Provider) tea.Cmd {
 // without changing the saved setting.
 func (m *Model) toggleActive(p provider.Provider) tea.Cmd {
 	name := p.Name()
+	if name == m.scopedOn {
+		m.scopedOn = "" // the user decides now
+	}
 	switch {
 	case !m.cfg.Enabled(name):
 		m.setStatus(name+" is disabled; press space to enable it", true)

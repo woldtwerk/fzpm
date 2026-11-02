@@ -32,9 +32,10 @@ fzpm asks which one to search (single key). A specific plugin wins over a
 generic one: a Drupal site is searched with the Drupal plugin, not all of
 Packagist (use `--provider packagist` or the plugins pane for that).
 
-**Scope**: with several plugins active, start the query with `/<plugin>` to
-search only that one, e.g. `/typo3 news` (a unique prefix like `/ty news` is
-enough).
+**Scope**: start the query with `/<plugin>` to search only that plugin, e.g.
+`/npm zod` in a Nuxt project (a unique prefix like `/np zod` is enough). This
+works for every enabled plugin: an inactive one is used while the scope is in
+the query and dropped again when you delete it.
 
 **Multi-select**: `Space` marks a row (`Ctrl-Space` while typing), `Tab` marks
 it and moves down a line. Marks are kept while you change the query. `i`

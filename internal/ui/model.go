@@ -112,7 +112,9 @@ type Model struct {
 	prefetchGen atomic.Int64
 	prefetchSem chan struct{}
 	remoteDone  map[string]bool
-	dirty       map[string]bool // providers whose index changed since save
+	// scopedOn is a plugin activated only because a /<plugin> scope names it.
+	scopedOn string
+	dirty    map[string]bool // providers whose index changed since save
 
 	status    string
 	statusErr bool
@@ -149,7 +151,6 @@ type Model struct {
 func New(svc *app.Service, provs []provider.Provider, opts Options) *Model {
 	ti := textinput.New()
 	ti.Prompt = "❯ "
-	ti.Placeholder = searchPlaceholder(provs)
 	ti.SetValue(opts.Query)
 	ti.Focus()
 
@@ -187,6 +188,7 @@ func New(svc *app.Service, provs []provider.Provider, opts Options) *Model {
 	if m.cfg == nil {
 		m.cfg = &config.Config{}
 	}
+	m.updatePlaceholder()
 	return m
 }
 
@@ -198,12 +200,12 @@ func providerNames(provs []provider.Provider) string {
 	return strings.Join(names, ", ")
 }
 
-// searchPlaceholder names the providers searched and, with several, how to
-// search a single one.
-func searchPlaceholder(provs []provider.Provider) string {
+// searchPlaceholder names the providers searched and, when there are
+// others to pick from, how to search a single one.
+func searchPlaceholder(provs []provider.Provider, candidates int) string {
 	s := "search " + providerNames(provs) + "…"
-	if len(provs) > 1 {
-		s += " (/" + provs[0].Name() + " to search one only)"
+	if candidates > 1 {
+		s += " (/<plugin> to search one only)"
 	}
 	return s
 }
@@ -344,7 +346,7 @@ func (m *Model) refilter(keepSelection bool) {
 	if keepSelection && m.cursor < len(m.results) {
 		sel = key(m.results[m.cursor])
 	}
-	scope, q := scopeQuery(m.provs, m.input.Value())
+	scope, q := scopeQuery(m.scopeCandidates(), m.input.Value())
 	src := m.tabSource()
 	if scope != "" {
 		scoped := make([]provider.Package, 0, len(src))
@@ -613,22 +615,63 @@ func (m *Model) quit() (tea.Model, tea.Cmd) {
 
 // queryChanged refilters and schedules the debounced remote search.
 func (m *Model) queryChanged() tea.Cmd {
+	activate := m.syncScope()
 	m.refilter(false)
 	m.searchSeq++
 	seq, raw := m.searchSeq, strings.TrimSpace(m.input.Value())
-	if _, q := scopeQuery(m.provs, raw); len([]rune(q)) < remoteMinLen || m.remoteDone[raw] {
-		return m.schedulePrefetch()
+	if _, q := scopeQuery(m.scopeCandidates(), raw); len([]rune(q)) < remoteMinLen || m.remoteDone[raw] {
+		return tea.Batch(activate, m.schedulePrefetch())
 	}
-	return tea.Batch(m.schedulePrefetch(), tea.Tick(remoteDelay, func(time.Time) tea.Msg {
+	return tea.Batch(activate, m.schedulePrefetch(), tea.Tick(remoteDelay, func(time.Time) tea.Msg {
 		return remoteTickMsg{seq, raw}
 	}))
+}
+
+// scopeCandidates are the plugins a /<plugin> scope can name: every
+// enabled one, active or not.
+func (m *Model) scopeCandidates() []provider.Provider {
+	var out []provider.Provider
+	for _, p := range m.available() {
+		if m.cfg.Enabled(p.Name()) || m.active(p.Name()) {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// syncScope activates an inactive plugin while a /<plugin> scope names it
+// (once the name is complete: typed in full or followed by a space) and
+// deactivates it again when the scope is gone or names another plugin.
+func (m *Model) syncScope() tea.Cmd {
+	raw := m.input.Value()
+	scope, _ := scopeQuery(m.scopeCandidates(), raw)
+	if m.scopedOn != "" && m.scopedOn != scope {
+		if p := m.provider(m.scopedOn); p != nil {
+			m.deactivate(p)
+		}
+		m.scopedOn = ""
+	}
+	if scope == "" || m.active(scope) {
+		return nil
+	}
+	word, _, spaced := strings.Cut(raw[1:], " ")
+	if !spaced && word != scope {
+		return nil
+	}
+	for _, p := range m.available() {
+		if p.Name() == scope {
+			m.scopedOn = scope
+			return m.activate(p)
+		}
+	}
+	return nil
 }
 
 // remoteSearch sends the query (without a /provider scope) to the scoped
 // provider, or to all of them.
 func (m *Model) remoteSearch(raw string) tea.Cmd {
 	m.remoteDone[raw] = true
-	scope, q := scopeQuery(m.provs, raw)
+	scope, q := scopeQuery(m.scopeCandidates(), raw)
 	var cmds []tea.Cmd
 	for _, p := range m.provs {
 		if scope != "" && p.Name() != scope {
@@ -643,10 +686,10 @@ func (m *Model) remoteSearch(raw string) tea.Cmd {
 	return tea.Batch(append(cmds, m.spin())...)
 }
 
-// scopeQuery splits a leading "/<provider>" off the query when several
-// providers are active: "/typo3 news" searches only TYPO3 for "news". A
-// unique prefix is enough ("/ty news"), and while only the scope is typed
-// the query is empty.
+// scopeQuery splits a leading "/<provider>" off the query when there are
+// several providers to choose from: "/typo3 news" searches only TYPO3 for
+// "news". A unique prefix is enough ("/ty news"), and while only the scope
+// is typed the query is empty.
 func scopeQuery(provs []provider.Provider, raw string) (scope, q string) {
 	if len(provs) < 2 || !strings.HasPrefix(raw, "/") {
 		return "", raw

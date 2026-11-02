@@ -649,12 +649,55 @@ func TestScopeQuery(t *testing.T) {
 	}
 
 	store, _ := cache.OpenDir(t.TempDir())
-	m := New(app.New(store, "test"), provs, Options{ImageMode: img.Off, Dir: "/"})
+	m := New(app.New(store, "test"), provs, Options{ImageMode: img.Off, Dir: "/", Available: provs})
 	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
 	drain(t, m, m.Init(), 0)
 	m.input.SetValue("/fake2")
 	m.refilter(false)
 	if len(m.results) != 1 || m.results[0].ID != "zebra" {
 		t.Errorf("scoped results = %+v", m.results)
+	}
+}
+
+// A scope naming an enabled but inactive plugin uses it while the scope
+// stays; disabled plugins cannot be scoped.
+func TestScopeActivatesPlugin(t *testing.T) {
+	cfg, _ := config.LoadFile(filepath.Join(t.TempDir(), "config.json"))
+	store, _ := cache.OpenDir(t.TempDir())
+	all := []provider.Provider{fake{}, fake2{}}
+	m := New(app.New(store, "test"), []provider.Provider{fake{}}, Options{ImageMode: img.Off, Dir: "/", Config: cfg, Available: all})
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	drain(t, m, m.Init(), 0)
+	typeQuery := func(q string) {
+		m.input.SetValue(q)
+		drain(t, m, m.queryChanged(), 0)
+	}
+
+	typeQuery("/fake2")
+	if !m.active("fake2") || len(m.results) != 1 || m.results[0].ID != "zebra" {
+		t.Fatalf("/fake2: active=%v results=%+v", m.active("fake2"), m.results)
+	}
+	typeQuery("/fake2 zeb")
+	if !m.active("fake2") || len(m.results) != 1 {
+		t.Fatalf("/fake2 zeb: results=%+v", m.results)
+	}
+	typeQuery("zeb")
+	if m.active("fake2") || !m.active("fake") {
+		t.Fatalf("scope gone, fake2 still active")
+	}
+	typeQuery("/fake")
+	if m.active("fake2") || len(m.results) == 0 {
+		t.Fatalf("/fake: active fake2=%v results=%+v", m.active("fake2"), m.results)
+	}
+	for _, r := range m.results {
+		if r.Provider != "fake" {
+			t.Fatalf("/fake shows %+v", r)
+		}
+	}
+
+	cfg.SetEnabled("fake2", false)
+	typeQuery("/fake2 zebra")
+	if m.active("fake2") {
+		t.Fatal("disabled plugin activated by scope")
 	}
 }
