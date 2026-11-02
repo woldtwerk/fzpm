@@ -134,38 +134,22 @@ func (n *Nuxt) Detail(ctx context.Context, c *http.Client, id string) (*provider
 	if !npm.ValidName.MatchString(id) {
 		return nil, fmt.Errorf("invalid package name %q", id)
 	}
-	var (
-		doc npm.Doc
-		mod module
-		ok  bool
-	)
-	g, gctx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		var err error
-		doc, err = npm.Fetch(gctx, c, id)
-		return err
-	})
-	g.Go(func() error {
-		mods, err := n.db.get(gctx, c)
-		if err == nil { // nuxt.com metadata is optional
-			mod, ok = mods[id]
-		}
-		return nil
-	})
-	if err := g.Wait(); err != nil {
+	mods, _ := n.db.get(ctx, c) // nuxt.com metadata is optional
+	mod, ok := mods[id]
+	if !ok {
+		return npm.Detail(ctx, c, "nuxt", id)
+	}
+	doc, err := npm.Fetch(ctx, c, id)
+	if err != nil {
 		return nil, err
 	}
 	// Gaps in the sources: npm often has no README for packages published
 	// from monorepos, and nuxt.com mostly reports 0 downloads; npmx.dev's
 	// weekly count is used throughout (as in the index).
-	repo := mod.Repo
-	if !ok {
-		repo = readme.GitHubRepo(npm.StringOrURL(doc.Repository))
-	}
-	g, gctx = errgroup.WithContext(ctx)
-	if strings.TrimSpace(doc.Readme) == "" || strings.HasPrefix(doc.Readme, "ERROR: No README") {
+	g, gctx := errgroup.WithContext(ctx)
+	if npm.NoReadme(doc) {
 		g.Go(func() error {
-			doc.Readme = readme.Fetch(gctx, c, readme.RawBase(repo))
+			doc.Readme = readme.Fetch(gctx, c, readme.RawBase(mod.Repo))
 			return nil
 		})
 	}
@@ -180,28 +164,17 @@ func (n *Nuxt) Detail(ctx context.Context, c *http.Client, id string) (*provider
 	if downloads > 0 {
 		mod.Stats.Downloads = downloads
 	}
-	d := buildDetail(id, doc, mod, ok)
-	if !ok && downloads > 0 {
-		d.Popularity = downloads
-	}
-	return d, nil
+	return buildDetail(id, doc, mod), nil
 }
 
-func buildDetail(id string, doc npm.Doc, mod module, listed bool) *provider.Detail {
+// buildDetail is the page of a module listed on nuxt.com.
+func buildDetail(id string, doc npm.Doc, mod module) *provider.Detail {
 	d := &provider.Detail{
-		Package: provider.Package{Provider: "nuxt", ID: id, Name: id, Summary: doc.Description},
-		URL:     "https://www.npmjs.com/package/" + id,
-
+		Package:         toPackage(mod),
+		URL:             "https://nuxt.com/modules/" + mod.Name,
 		PopularityLabel: "downloads / week",
 	}
 	repo := mod.Repo
-	if listed {
-		d.Package = toPackage(mod)
-		d.URL = "https://nuxt.com/modules/" + mod.Name
-		d.PopularityLabel = "downloads / week"
-	} else {
-		repo = readme.GitHubRepo(npm.StringOrURL(doc.Repository))
-	}
 	d.Body = readme.Clean(doc.Readme, readme.RawBase(repo))
 	d.Images = readme.Images(d.Body)
 	d.Releases = npm.Releases(doc)
@@ -209,15 +182,13 @@ func buildDetail(id string, doc npm.Doc, mod module, listed bool) *provider.Deta
 	latest := doc.DistTags["latest"]
 	info := provider.Section{Title: "Module information"}
 	add := func(label string) { info.Items = append(info.Items, provider.Link{Label: label}) }
-	if listed {
-		add("Category: " + mod.Category)
-		add("Type: " + mod.Type)
-		if mod.Compatibility.Nuxt != "" {
-			add("Nuxt: " + mod.Compatibility.Nuxt)
-		}
-		add(fmt.Sprintf("%s downloads / week", groupDigits(mod.Stats.Downloads)))
-		add(fmt.Sprintf("%s GitHub stars", groupDigits(mod.Stats.Stars)))
+	add("Category: " + mod.Category)
+	add("Type: " + mod.Type)
+	if mod.Compatibility.Nuxt != "" {
+		add("Nuxt: " + mod.Compatibility.Nuxt)
 	}
+	add(fmt.Sprintf("%s downloads / week", groupDigits(mod.Stats.Downloads)))
+	add(fmt.Sprintf("%s GitHub stars", groupDigits(mod.Stats.Stars)))
 	if latest != "" {
 		add("Latest: " + latest)
 	}
@@ -228,22 +199,16 @@ func buildDetail(id string, doc npm.Doc, mod module, listed bool) *provider.Deta
 	d.Sidebar = append(d.Sidebar, info)
 
 	maint := provider.Section{Title: "Maintainers"}
-	if listed {
-		for _, m := range mod.Maintainers {
-			l := provider.Link{Label: m.Name}
-			if m.Github != "" {
-				l.URL = "https://github.com/" + m.Github
-				l.Image = "https://github.com/" + m.Github + ".png?size=80"
-				if l.Label == "" {
-					l.Label = m.Github
-				}
+	for _, m := range mod.Maintainers {
+		l := provider.Link{Label: m.Name}
+		if m.Github != "" {
+			l.URL = "https://github.com/" + m.Github
+			l.Image = "https://github.com/" + m.Github + ".png?size=80"
+			if l.Label == "" {
+				l.Label = m.Github
 			}
-			maint.Items = append(maint.Items, l)
 		}
-	} else {
-		for _, m := range doc.Maintainers {
-			maint.Items = append(maint.Items, provider.Link{Label: m.Name, URL: "https://www.npmjs.com/~" + m.Name})
-		}
+		maint.Items = append(maint.Items, l)
 	}
 	if len(maint.Items) > 0 {
 		d.Sidebar = append(d.Sidebar, maint)
@@ -255,13 +220,9 @@ func buildDetail(id string, doc npm.Doc, mod module, listed bool) *provider.Deta
 			s.Items = append(s.Items, provider.Link{Label: label, URL: u})
 		}
 	}
-	if listed {
-		link(&res, "Website", mod.Website)
-		link(&res, "Documentation", mod.LearnMore)
-		link(&res, "nuxt.com", d.URL)
-	} else {
-		link(&res, "Homepage", doc.Homepage)
-	}
+	link(&res, "Website", mod.Website)
+	link(&res, "Documentation", mod.LearnMore)
+	link(&res, "nuxt.com", d.URL)
 	link(&res, "npm", "https://www.npmjs.com/package/"+id)
 	d.Sidebar = append(d.Sidebar, res)
 

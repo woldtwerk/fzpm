@@ -15,8 +15,22 @@ based; included providers:
 | `d` / `D` | `drush pmu` / + `composer remove` | `nuxi module remove --skipInstall` / + `nuxi module remove --skipConfig` | — (Composer mode has no disabled state) / `composer remove` |
 | Installed / Uninstalled | `core.extension.yml` / `*.info.yml` + `composer.json` | `modules: [...]` in `nuxt.config` + `./modules` / `package.json` dependencies that are listed on [nuxt.com/modules](https://nuxt.com/modules) (or registered in `nuxt.config`) | extensions in `composer.lock` (all active in Composer mode) / — |
 
+**Generic plugins** for whole ecosystems, built on the same code as the
+plugins above:
+
+| | Packagist | npm |
+|---|---|---|
+| Project detection | any `composer.json` (ddev if `.ddev/`) | any `package.json` (package manager from the lockfile) |
+| Index | the 1000 most downloaded packages; Packagist search for the rest | none (the registry has no popularity list): npm registry search while typing, results are cached |
+| Details | Packagist (README from GitHub, versions with required PHP, maintainers) | npm registry (README, versions, maintainers) + weekly downloads from npmx.dev |
+| `i` / `I` | `composer require` / `composer require --dev` | `npm install` / `--save-dev` (pnpm/yarn/bun `add`) |
+| `D` | `composer remove` | `npm uninstall` (pnpm/yarn/bun `remove`) |
+| Installed | `require` + `require-dev` of `composer.json` | `dependencies` + `devDependencies` of `package.json` |
+
 Inside a project the matching provider is enabled automatically; elsewhere
-fzpm asks which one to search (single key).
+fzpm asks which one to search (single key). A specific plugin wins over a
+generic one: a Drupal site is searched with the Drupal plugin, not all of
+Packagist (use `--provider packagist` or the plugins pane for that).
 
 **Scope**: with several plugins active, start the query with `/<plugin>` to
 search only that one, e.g. `/typo3 news` (a unique prefix like `/ty news` is
@@ -48,7 +62,8 @@ its icon). `--provider` overrides the settings.
 
 Plugins can provide an icon (`provider.Iconer`): a Nerd Font glyph and color,
 e.g. Drupal `nf-dev-drupal` (U+E742), Nuxt `nf-md-nuxt` (U+F1106), TYPO3
-`nf-dev-typo3` (U+E772).
+`nf-dev-typo3` (U+E772), Packagist `nf-dev-composer` (U+E783), npm
+`nf-dev-npm` (U+E71E).
 
 ```
 fzpm [flags] [query]
@@ -59,6 +74,8 @@ fzpm [flags] [query]
   fzpm --refresh       # rebuild the search index now
   fzpm --images=off    # auto | halfblock | kitty | off  (env FZPM_IMAGES)
   fzpm --provider drupal
+  fzpm --provider npm zod     # search all of npm
+  fzpm --provider packagist guzzle
 ```
 
 ## Install

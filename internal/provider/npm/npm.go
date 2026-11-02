@@ -202,6 +202,24 @@ func ReadPackageJSON(dir string) (PackageJSON, bool) {
 	return p, true
 }
 
+// Find walks up from dir to the first package.json that match accepts; the
+// project remembers its package manager in Data["pm"].
+func Find(dir string, match func(PackageJSON) bool) (provider.Project, bool) {
+	for d := dir; ; d = filepath.Dir(d) {
+		if pkg, ok := ReadPackageJSON(d); ok && match(pkg) {
+			pm := PackageManager(d)
+			return provider.Project{
+				Root:  d,
+				Label: pm + ": " + provider.ShortPath(d),
+				Data:  map[string]string{"pm": pm},
+			}, true
+		}
+		if parent := filepath.Dir(d); parent == d {
+			return provider.Project{}, false
+		}
+	}
+}
+
 // PackageManager guesses the package manager from the lockfile.
 func PackageManager(dir string) string {
 	for _, c := range []struct{ file, pm string }{

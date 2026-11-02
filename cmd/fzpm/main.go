@@ -22,7 +22,9 @@ import (
 
 	// Providers register themselves; add new sources here.
 	_ "fzpm/internal/provider/drupal"
+	_ "fzpm/internal/provider/npmjs"
 	_ "fzpm/internal/provider/nuxt"
+	_ "fzpm/internal/provider/packagist"
 	_ "fzpm/internal/provider/typo3"
 )
 
@@ -144,7 +146,7 @@ func selectProviders(flagVal, dir string, enabled []provider.Provider) (provs []
 		}
 	}
 	if len(provs) > 0 {
-		return provs, true, nil
+		return provider.PreferSpecific(provs), true, nil
 	}
 	return enabled, false, nil
 }

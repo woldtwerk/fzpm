@@ -3,10 +3,7 @@ package nuxt
 
 import (
 	"fmt"
-	"os"
 	"os/exec"
-	"path/filepath"
-	"strings"
 
 	"fzpm/internal/provider"
 	"fzpm/internal/provider/npm"
@@ -30,26 +27,7 @@ func (*Nuxt) Icon() (string, string) { return "\U000F1106", "#00dc82" }
 
 // Detect walks up from dir looking for a package.json depending on nuxt.
 func (*Nuxt) Detect(dir string) (provider.Project, bool) {
-	for d := dir; ; d = filepath.Dir(d) {
-		if pkg, ok := npm.ReadPackageJSON(d); ok && pkg.Has("nuxt") {
-			pm := npm.PackageManager(d)
-			return provider.Project{
-				Root:  d,
-				Label: pm + ": " + shortPath(d),
-				Data:  map[string]string{"pm": pm},
-			}, true
-		}
-		if parent := filepath.Dir(d); parent == d {
-			return provider.Project{}, false
-		}
-	}
-}
-
-func shortPath(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(p, home) {
-		return "~" + strings.TrimPrefix(p, home)
-	}
-	return p
+	return npm.Find(dir, func(p npm.PackageJSON) bool { return p.Has("nuxt") })
 }
 
 // Actions: [0] install the package only, [1] install and register it in

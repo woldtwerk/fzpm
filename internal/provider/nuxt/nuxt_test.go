@@ -144,7 +144,7 @@ func TestBuildDetail(t *testing.T) {
 		"website":"https://image.nuxt.com","category":"Images","type":"official",
 		"maintainers":[{"name":"Daniel Roe","github":"danielroe"}],"compatibility":{"nuxt":">=3.0.0"},"stats":{"downloads":1234567,"stars":1500}}`), &mod)
 
-	d := buildDetail("@nuxt/image", doc, mod, true)
+	d := buildDetail("@nuxt/image", doc, mod)
 	if d.Name != "image" || d.URL != "https://nuxt.com/modules/image" || d.Popularity != 1234567 {
 		t.Errorf("package = %+v url=%s", d.Package, d.URL)
 	}

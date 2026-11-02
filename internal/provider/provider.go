@@ -10,8 +10,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"os/exec"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 )
@@ -148,6 +150,29 @@ type Remover interface {
 	RemoveCommands(lps []LocalPackage, proj Project) ([]*exec.Cmd, error)
 }
 
+// Generic is implemented by providers for a whole ecosystem (all of
+// Packagist, all of npm). Their projects (any composer.json / package.json)
+// include those of the specific providers built on them.
+type Generic interface {
+	Generic()
+}
+
+// PreferSpecific drops generic providers from detected ones when a specific
+// provider was detected too (a Drupal site is not searched on all of
+// Packagist unless asked for).
+func PreferSpecific(ps []Provider) []Provider {
+	var specific []Provider
+	for _, p := range ps {
+		if _, generic := p.(Generic); !generic {
+			specific = append(specific, p)
+		}
+	}
+	if len(specific) == 0 {
+		return ps
+	}
+	return specific
+}
+
 var (
 	mu       sync.RWMutex
 	registry = map[string]Provider{}
@@ -181,6 +206,14 @@ func All() []Provider {
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name() < out[j].Name() })
 	return out
+}
+
+// ShortPath abbreviates the home directory with "~" (for project labels).
+func ShortPath(p string) string {
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(p, home) {
+		return "~" + strings.TrimPrefix(p, home)
+	}
+	return p
 }
 
 // Fetch GETs a URL and returns the body of a 200 response.

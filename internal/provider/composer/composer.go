@@ -9,7 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"strings"
 
 	"fzpm/internal/provider"
 )
@@ -22,8 +21,9 @@ var (
 
 // JSON is the part of composer.json the providers look at.
 type JSON struct {
-	Require map[string]string `json:"require"`
-	Config  struct {
+	Require    map[string]string `json:"require"`
+	RequireDev map[string]string `json:"require-dev"`
+	Config     struct {
 		BinDir string `json:"bin-dir"`
 	} `json:"config"`
 	Extra map[string]json.RawMessage `json:"extra"`
@@ -56,21 +56,13 @@ func Find(dir string, match func(JSON) bool) (provider.Project, bool) {
 				p.Data["ddev"] = "1"
 				kind = "ddev"
 			}
-			p.Label = kind + ": " + ShortPath(d)
+			p.Label = kind + ": " + provider.ShortPath(d)
 			return p, true
 		}
 		if parent := filepath.Dir(d); parent == d {
 			return provider.Project{}, false
 		}
 	}
-}
-
-// ShortPath abbreviates the home directory with "~".
-func ShortPath(p string) string {
-	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(p, home) {
-		return "~" + strings.TrimPrefix(p, home)
-	}
-	return p
 }
 
 // Spec is name:version, or name for the latest version.
@@ -124,19 +116,25 @@ type Locked struct {
 		Type string `json:"type"` // "path" for packages from a local path repository
 	} `json:"dist"`
 	Extra map[string]json.RawMessage `json:"extra"`
+	Dev   bool                       `json:"-"` // from packages-dev
 }
 
-// Lock returns the packages of root/composer.lock (nil without one).
+// Lock returns the packages of root/composer.lock, dev packages included
+// (nil without one).
 func Lock(root string) []Locked {
 	b, err := os.ReadFile(filepath.Join(root, "composer.lock"))
 	if err != nil {
 		return nil
 	}
 	var lock struct {
-		Packages []Locked `json:"packages"`
+		Packages    []Locked `json:"packages"`
+		PackagesDev []Locked `json:"packages-dev"`
 	}
 	if json.Unmarshal(b, &lock) != nil {
 		return nil
 	}
-	return lock.Packages
+	for i := range lock.PackagesDev {
+		lock.PackagesDev[i].Dev = true
+	}
+	return append(lock.Packages, lock.PackagesDev...)
 }

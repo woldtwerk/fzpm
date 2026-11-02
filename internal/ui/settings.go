@@ -216,7 +216,7 @@ func (m *Model) settingsView() string {
 		if ic == "" {
 			ic = " "
 		}
-		line := fmt.Sprintf("%s%s %s %s  %s  %s", marker, box, ic, bold.Render(pad(p.Name(), 8)), pad(state, 22), where)
+		line := fmt.Sprintf("%s%s %s %s  %s  %s", marker, box, ic, bold.Render(pad(p.Name(), 9)), pad(state, 22), where)
 		if i == m.settingsCursor {
 			line = selStyle.Render(line)
 		}

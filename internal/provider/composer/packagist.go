@@ -85,6 +85,30 @@ func Search(ctx context.Context, c *http.Client, prov, query, typ string, page i
 	return out, nil
 }
 
+// Popular returns one page of packagist.org's most downloaded packages.
+func Popular(ctx context.Context, c *http.Client, prov string, page int) ([]provider.Package, error) {
+	r, err := provider.Fetch(ctx, c, fmt.Sprintf("%s/explore/popular.json?per_page=%d&page=%d", PackagistURL, SearchPageSize, page))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+	var res struct {
+		Packages []struct {
+			Name        string `json:"name"`
+			Description string `json:"description"`
+			Downloads   int64  `json:"downloads"`
+		} `json:"packages"`
+	}
+	if err := json.NewDecoder(r).Decode(&res); err != nil {
+		return nil, fmt.Errorf("packagist popular: %w", err)
+	}
+	out := make([]provider.Package, len(res.Packages))
+	for i, p := range res.Packages {
+		out[i] = provider.Package{Provider: prov, ID: p.Name, Name: p.Name, Summary: p.Description, Popularity: p.Downloads}
+	}
+	return out, nil
+}
+
 // abandoned: the field is missing, false, true or the suggested replacement.
 func abandoned(raw json.RawMessage) bool {
 	s := string(raw)
