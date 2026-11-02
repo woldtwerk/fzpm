@@ -6,14 +6,14 @@ based; included providers:
 [fzpm.webm](https://github.com/user-attachments/assets/fe29ce06-00d2-4bd4-819e-fa90f6b9814f)
 
 
-| | Drupal | Nuxt |
-|---|---|---|
-| Project detection | `composer.json` requiring `drupal/core*` (ddev if `.ddev/`) | `package.json` depending on `nuxt` (package manager from the lockfile) |
-| Index | top 1000 by installs + newest + recently changed (drupal.org) | all modules on nuxt.com (one request); weekly downloads from [npmx.dev](https://npmx.dev) (nuxt.com's counts are mostly missing) |
-| Details | project page + release history | npm registry (README, versions) + nuxt.com (maintainers, category, compatibility, links) |
-| `i` / `e` (or `I`) | `composer require` / + `drush en` | `nuxi module add --skipConfig` / `nuxi module add` |
-| `d` / `D` | `drush pmu` / + `composer remove` | `nuxi module remove --skipInstall` / + `nuxi module remove --skipConfig` |
-| Installed / Uninstalled | `core.extension.yml` / `*.info.yml` + `composer.json` | `modules: [...]` in `nuxt.config` + `./modules` / `package.json` dependencies that are listed on [nuxt.com/modules](https://nuxt.com/modules) (or registered in `nuxt.config`) |
+| | Drupal | Nuxt | TYPO3 |
+|---|---|---|---|
+| Project detection | `composer.json` requiring `drupal/core*` (ddev if `.ddev/`) | `package.json` depending on `nuxt` (package manager from the lockfile) | `composer.json` requiring `typo3/cms-core` (ddev if `.ddev/`) |
+| Index | top 1000 by installs + newest + recently changed (drupal.org) | all modules on nuxt.com (one request); weekly downloads from [npmx.dev](https://npmx.dev) (nuxt.com's counts are mostly missing) | all `typo3-cms-extension` packages on Packagist (names), the ~300 most popular with description + downloads; Packagist search for the rest |
+| Details | project page + release history | npm registry (README, versions) + nuxt.com (maintainers, category, compatibility, links) | Packagist (README from GitHub, versions, maintainers) + extension key / TER link |
+| `i` / `e` (or `I`) | `composer require` / + `drush en` | `nuxi module add --skipConfig` / `nuxi module add` | `composer require` / + `typo3 extension:setup` |
+| `d` / `D` | `drush pmu` / + `composer remove` | `nuxi module remove --skipInstall` / + `nuxi module remove --skipConfig` | — (Composer mode has no disabled state) / `composer remove` |
+| Installed / Uninstalled | `core.extension.yml` / `*.info.yml` + `composer.json` | `modules: [...]` in `nuxt.config` + `./modules` / `package.json` dependencies that are listed on [nuxt.com/modules](https://nuxt.com/modules) (or registered in `nuxt.config`) | extensions in `composer.lock` (all active in Composer mode) / — |
 
 Inside a project the matching provider is enabled automatically; elsewhere
 fzpm asks which one to search (single key).
@@ -43,7 +43,8 @@ terminal has no Nerd Font symbols (rows then show the plugin name instead of
 its icon). `--provider` overrides the settings.
 
 Plugins can provide an icon (`provider.Iconer`): a Nerd Font glyph and color,
-e.g. Drupal `nf-dev-drupal` (U+E742), Nuxt `nf-md-nuxt` (U+F1106).
+e.g. Drupal `nf-dev-drupal` (U+E742), Nuxt `nf-md-nuxt` (U+F1106), TYPO3
+`nf-dev-typo3` (U+E772).
 
 ```
 fzpm [flags] [query]
@@ -142,7 +143,7 @@ vim.api.nvim_create_autocmd("TermResponse", {
 |---|---|
 | Search (insert, default) | type to filter · `⏎` details · `C-n`/`C-p` (`C-j`/`C-k`) move · `M-i` install · `M-I` install + enable · `M-y` yank · `M-o` browser · `Esc` normal mode |
 | List (normal) | `,` plugins · `1`/`2`/`3`, `gt`/`gT` tabs (`M-1`..`M-3` in insert) · `r` refresh (Search: re-fetch the index, like `--refresh`; local tabs: re-read the project; `M-r` in insert) · `j`/`k` · `gg`/`G` · `C-d`/`C-u` · `C-f`/`C-b` · `H`/`L` · `l`/`⏎` details · `i` install · `I` install + enable · `y` yank · `o` browser · `/` search · `S` clear & search · `q` quit · `?` help |
-| Details | `j`/`k` · `C-d`/`C-u` · `gg`/`G` · `]r` releases · `[r` top · `J`/`K` scroll sidebar · `n`/`N` select release (install uses its version) · `i`/`I` · `r` reload · `p` toggle images · `y` · `o` · `h`/`Esc`/`q` back |
+| Details | `j`/`k` · `C-d`/`C-u` · `gg`/`G` · `]r` releases · `[r` top · `J`/`K` scroll sidebar · `n`/`N` select release (install uses its version) · `i`/`I` · `r` reload · `p` toggle images · `y` · `o` · `h`/`Esc`/`q` back | Packagist (README from GitHub, versions, maintainers) + extension key / TER link |
 
 ## Adding a provider
 

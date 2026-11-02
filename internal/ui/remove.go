@@ -33,12 +33,13 @@ func (m *Model) disableAction(remove bool) tea.Cmd {
 			continue
 		}
 		proj := m.projects[prov.Name()]
-		if len(on) > 0 {
-			d, ok := prov.(provider.Disabler)
-			if !ok {
-				m.setStatus(prov.Name()+" modules cannot be disabled by fzpm", true)
-				return nil
-			}
+		d, canDisable := prov.(provider.Disabler)
+		if len(on) > 0 && !canDisable && !remove {
+			m.setStatus(prov.Name()+" modules cannot be disabled by fzpm", true)
+			return nil
+		}
+		// Providers without a disabled state (Remover only) remove directly.
+		if len(on) > 0 && canDisable {
 			cmds, err := d.DisableCommands(on, proj)
 			if err != nil {
 				m.setStatus(err.Error(), true)

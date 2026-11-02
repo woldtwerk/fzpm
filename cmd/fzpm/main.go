@@ -23,6 +23,7 @@ import (
 	// Providers register themselves; add new sources here.
 	_ "fzpm/internal/provider/drupal"
 	_ "fzpm/internal/provider/nuxt"
+	_ "fzpm/internal/provider/typo3"
 )
 
 // version is set by GoReleaser; local builds are "dev" and never update
