@@ -16,6 +16,7 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"fzpm/internal/provider"
+	"fzpm/internal/provider/composer"
 )
 
 var _ provider.Lister = Drupal{}
@@ -102,28 +103,16 @@ func (Drupal) Local(ctx context.Context, _ *http.Client, proj provider.Project) 
 	return out, nil
 }
 
-type composerJSON struct {
-	Require map[string]string `json:"require"`
-	Extra   struct {
-		Scaffold struct {
-			Locations struct {
-				WebRoot string `json:"web-root"`
-			} `json:"locations"`
-		} `json:"drupal-scaffold"`
-	} `json:"extra"`
-}
-
-func readComposer(root string) composerJSON {
-	var c composerJSON
-	if b, err := os.ReadFile(filepath.Join(root, "composer.json")); err == nil {
-		_ = json.Unmarshal(b, &c)
-	}
-	return c
-}
-
 // webRoot finds the docroot: composer scaffold setting, else common names.
 func webRoot(root string) string {
-	if wr := readComposer(root).Extra.Scaffold.Locations.WebRoot; wr != "" {
+	c, _ := composer.Read(root)
+	var scaffold struct {
+		Locations struct {
+			WebRoot string `json:"web-root"`
+		} `json:"locations"`
+	}
+	_ = json.Unmarshal(c.Extra["drupal-scaffold"], &scaffold)
+	if wr := scaffold.Locations.WebRoot; wr != "" {
 		return filepath.Join(root, filepath.Clean(wr))
 	}
 	for _, d := range []string{"web", "docroot", "html", "public"} {
@@ -137,7 +126,8 @@ func webRoot(root string) string {
 // requiredProjects lists drupal/* projects required in composer.json.
 func requiredProjects(root string) []string {
 	var out []string
-	for name := range readComposer(root).Require {
+	c, _ := composer.Read(root)
+	for name := range c.Require {
 		p, ok := strings.CutPrefix(name, "drupal/")
 		if !ok || p == "core" || strings.HasPrefix(p, "core-") || !validID.MatchString(p) {
 			continue
@@ -147,27 +137,11 @@ func requiredProjects(root string) []string {
 	return out
 }
 
-type lockedPackage struct {
-	Name    string `json:"name"`
-	Version string `json:"version"`
-	Type    string `json:"type"`
-}
-
 // lockPackages maps drupal project names (and "core") to composer.lock
 // entries.
-func lockPackages(root string) map[string]lockedPackage {
-	out := map[string]lockedPackage{}
-	b, err := os.ReadFile(filepath.Join(root, "composer.lock"))
-	if err != nil {
-		return out
-	}
-	var lock struct {
-		Packages []lockedPackage `json:"packages"`
-	}
-	if json.Unmarshal(b, &lock) != nil {
-		return out
-	}
-	for _, p := range lock.Packages {
+func lockPackages(root string) map[string]composer.Locked {
+	out := map[string]composer.Locked{}
+	for _, p := range composer.Lock(root) {
 		if name, ok := strings.CutPrefix(p.Name, "drupal/"); ok {
 			out[name] = p
 		}
@@ -311,5 +285,5 @@ func (Drupal) RemoveCommands(lps []provider.LocalPackage, proj provider.Project)
 			args = append(args, "drupal/"+lp.ID)
 		}
 	}
-	return []*exec.Cmd{tool(proj, "composer", args...)}, nil
+	return []*exec.Cmd{composer.Command(proj, args...)}, nil
 }

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"fzpm/internal/provider"
+	"fzpm/internal/provider/npm"
 )
 
 func write(t *testing.T, root, rel, content string) {
@@ -128,7 +129,7 @@ func TestLocal(t *testing.T) {
 }
 
 func TestBuildDetail(t *testing.T) {
-	var doc npmDoc
+	var doc npm.Doc
 	json.Unmarshal([]byte(`{
 		"name": "@nuxt/image",
 		"dist-tags": {"latest": "2.2.1", "rc": "3.0.0-rc.1"},
@@ -179,21 +180,6 @@ func TestBuildDetail(t *testing.T) {
 	}
 }
 
-func TestCleanReadmeReferences(t *testing.T) {
-	md := "# Title\n\n- `<nuxt-picture>` replaces `<picture>`\n\n[![npm version][npm-version-src]][npm-version-href]\n[![License][license-src]][license-href]\n\nSee the [docs][docs] and ![Shot][shot].\n\n[npm-version-src]: https://npmx.dev/api/registry/badge/version/@nuxt/image\n[npm-version-href]: https://npmx.dev/package/@nuxt/image\n[license-src]: https://img.shields.io/npm/l/x.svg\n[license-href]: https://npmjs.com\n[docs]: https://image.nuxt.com\n[shot]: ./shot.png \"Screenshot\"\n"
-	out := cleanReadme(md, "https://raw.githubusercontent.com/nuxt/image/main/")
-	for _, bad := range []string{"badge", "shields", "[npm-version", "]: "} {
-		if strings.Contains(out, bad) {
-			t.Errorf("leftover %q in:\n%s", bad, out)
-		}
-	}
-	for _, want := range []string{"`<nuxt-picture>` replaces `<picture>`", "[docs](https://image.nuxt.com)", "![Shot](https://raw.githubusercontent.com/nuxt/image/main/shot.png)"} {
-		if !strings.Contains(out, want) {
-			t.Errorf("missing %q in:\n%s", want, out)
-		}
-	}
-}
-
 func TestIndexUsesNpmxDownloads(t *testing.T) {
 	failed := false
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -228,9 +214,9 @@ func TestIndexUsesNpmxDownloads(t *testing.T) {
 		}
 	}))
 	defer srv.Close()
-	oldM, oldD, oldP := modulesURL, downloadsURL, retryPause
-	modulesURL, downloadsURL, retryPause = srv.URL+"/modules", srv.URL+"/dl?packages=", 0
-	defer func() { modulesURL, downloadsURL, retryPause = oldM, oldD, oldP }()
+	oldM, oldD, oldP := modulesURL, npm.DownloadsURL, npm.RetryPause
+	modulesURL, npm.DownloadsURL, npm.RetryPause = srv.URL+"/modules", srv.URL+"/dl?packages=", 0
+	defer func() { modulesURL, npm.DownloadsURL, npm.RetryPause = oldM, oldD, oldP }()
 
 	got := map[string]int64{}
 	batches := 0

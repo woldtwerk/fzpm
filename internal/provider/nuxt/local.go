@@ -2,7 +2,6 @@ package nuxt
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -13,6 +12,7 @@ import (
 	"strings"
 
 	"fzpm/internal/provider"
+	"fzpm/internal/provider/npm"
 )
 
 var _ provider.Lister = (*Nuxt)(nil)
@@ -26,7 +26,7 @@ var _ provider.Lister = (*Nuxt)(nil)
 //
 // Without network access only modules registered in nuxt.config are found.
 func (n *Nuxt) Local(ctx context.Context, c *http.Client, proj provider.Project) ([]provider.LocalPackage, error) {
-	pkg, ok := readPackageJSON(proj.Root)
+	pkg, ok := npm.ReadPackageJSON(proj.Root)
 	if !ok {
 		return nil, fmt.Errorf("no package.json in %s", proj.Root)
 	}
@@ -39,7 +39,7 @@ func (n *Nuxt) Local(ctx context.Context, c *http.Client, proj provider.Project)
 			if !onNuxtCom && !enabled[name] {
 				continue
 			}
-			version := installedVersion(proj.Root, name)
+			version := npm.InstalledVersion(proj.Root, name)
 			if version == "" {
 				version = rng
 			}
@@ -92,17 +92,6 @@ func basePackage(spec string) string {
 		return parts[0] + "/" + parts[1]
 	}
 	return parts[0]
-}
-
-func installedVersion(root, name string) string {
-	var p struct {
-		Version string `json:"version"`
-	}
-	b, err := os.ReadFile(filepath.Join(root, "node_modules", name, "package.json"))
-	if err != nil || json.Unmarshal(b, &p) != nil {
-		return ""
-	}
-	return p.Version
 }
 
 var (
@@ -176,7 +165,7 @@ func nuxiRemove(lps []provider.LocalPackage, proj provider.Project, flag string)
 		if lp.ID == "" {
 			return nil, fmt.Errorf("%s is custom code; remove it by hand", lp.Module)
 		}
-		if !validNpm.MatchString(lp.ID) {
+		if !npm.ValidName.MatchString(lp.ID) {
 			return nil, fmt.Errorf("invalid package name %q", lp.ID)
 		}
 		args = append(args, lp.ID)
