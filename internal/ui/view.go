@@ -27,6 +27,13 @@ var (
 )
 
 func (m *Model) View() string {
+	if m.term != nil {
+		return overlay(m.baseView(), m.termView(), m.width, m.height)
+	}
+	return m.baseView()
+}
+
+func (m *Model) baseView() string {
 	if m.settingsOpen {
 		return m.settingsView()
 	}
@@ -215,6 +222,9 @@ const helpText = `fzpm — keys
    d / D            disable / + remove
    r                reload from source      y, o                yank, open
    h, esc, q        back
+
+ COMMANDS run in a pane: keys go to the command (ctrl-c aborts);
+   it closes on success, esc / ⏎ close it after a failure
 
  press any key to close`
 

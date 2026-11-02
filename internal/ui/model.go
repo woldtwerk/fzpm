@@ -116,6 +116,11 @@ type Model struct {
 	status    string
 	statusErr bool
 
+	// command modal (install/enable/disable run in a pseudo terminal)
+	term         *runner.Term
+	termFinished bool
+	termResult   execDoneMsg // reported once the commands finish
+
 	// detail screen
 	detail        *provider.Detail
 	detailFor     provider.Package
@@ -305,7 +310,7 @@ func (m *Model) waitEvent() tea.Cmd {
 }
 
 func (m *Model) busy() bool {
-	return m.indexing > 0 || m.searching > 0 || m.localLoading > 0 ||
+	return (m.term != nil && !m.termFinished) || m.indexing > 0 || m.searching > 0 || m.localLoading > 0 ||
 		(m.screen == screenDetail && (m.refreshing || (m.detail == nil && m.detailErr == nil)))
 }
 
@@ -394,6 +399,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.input.Width = max(10, min(m.width/2, m.width-lipgloss.Width(m.projectLabel())-4))
 		m.clampList()
+		if m.term != nil {
+			m.term.Resize(m.termSize())
+		}
 		if m.screen == screenDetail {
 			return m, m.rebuildDetail(false)
 		}
@@ -503,6 +511,31 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 
+	case termUpdateMsg:
+		if msg.t != m.term {
+			return m, nil
+		}
+		return m, m.waitTerm()
+
+	case termDoneMsg:
+		if msg.t != m.term {
+			return m, nil
+		}
+		m.termFinished = true
+		m.termResult.err = msg.err
+		cmds := []tea.Cmd{m.finishExec(m.termResult)}
+		if msg.err == nil {
+			t := m.term
+			cmds = append(cmds, tea.Tick(termCloseDelay, func(time.Time) tea.Msg { return termCloseMsg{t} }))
+		}
+		return m, tea.Batch(cmds...)
+
+	case termCloseMsg:
+		if msg.t == m.term {
+			m.closeTerm()
+		}
+		return m, nil
+
 	case execDoneMsg:
 		return m, m.finishExec(msg)
 
@@ -546,6 +579,9 @@ func (m *Model) saveIndex(prov string) {
 
 // Quit saves dirty indexes and stops background work.
 func (m *Model) quit() (tea.Model, tea.Cmd) {
+	if m.term != nil {
+		m.closeTerm()
+	}
 	for prov := range m.dirty {
 		m.saveIndex(prov)
 	}
@@ -773,15 +809,22 @@ func (m *Model) runMarked(n int) tea.Cmd {
 	return m.execute(all, rows, execDoneMsg{label: label, enabled: enabled, batch: true})
 }
 
-// execute hands the terminal to cmds for pkgs and reports back with done
-// (what and err filled in).
+// execute runs cmds for pkgs in the command modal and reports back with
+// done (what and err filled in). Without pseudo terminals it hands the whole
+// terminal to the commands instead.
 func (m *Model) execute(cmds []*exec.Cmd, pkgs []provider.Package, done execDoneMsg) tea.Cmd {
 	done.what = pkgNames(pkgs)
 	m.setStatus(done.label+" "+done.what+"…", false)
-	return tea.Exec(&runner.Seq{Cmds: cmds}, func(err error) tea.Msg {
-		done.err = err
-		return done
-	})
+	w, h := m.termSize()
+	t, err := startTerm(cmds, w, h)
+	if err != nil {
+		return tea.Exec(&runner.Seq{Cmds: cmds}, func(err error) tea.Msg {
+			done.err = err
+			return done
+		})
+	}
+	m.term, m.termFinished, m.termResult = t, false, done
+	return tea.Batch(m.waitTerm(), m.spin())
 }
 
 // finishExec records the result of an action and re-reads the project.

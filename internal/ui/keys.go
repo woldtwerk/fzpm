@@ -5,6 +5,9 @@ import (
 )
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.term != nil {
+		return m.termKey(msg)
+	}
 	k := msg.String()
 	if k == "ctrl+c" {
 		return m.quit()

@@ -86,6 +86,11 @@ Build: `go build -o fzpm ./cmd/fzpm` (Go ≥ 1.22).
   On *Uninstalled*, `i`/`I` enable the module (this does run `drush en`).
   `core.extension.yml` changes only after `drush cex`; modules enabled in the
   current session are shown as installed meanwhile.
+- **Commands** (install, enable, disable, remove) run in a pane over the list,
+  inside a pseudo terminal: colours, progress bars and prompts work, and
+  keys (including `Ctrl-C`) go to the command. The pane closes by itself on
+  success and stays open on failure until `Esc`/`⏎`. Where pseudo terminals
+  are unavailable (Windows) the command takes over the whole terminal.
 - **Install** detects the Drupal project (walks up to a `composer.json`
   requiring `drupal/core*`) and uses `ddev composer` / `ddev drush` when a
   `.ddev` directory exists, otherwise `composer` and `vendor/bin/drush`.
