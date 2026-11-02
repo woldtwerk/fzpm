@@ -98,16 +98,25 @@ func shortPath(p string) string {
 }
 
 // Actions: [0] install the package only, [1] install and register it in
-// nuxt.config (what `nuxi module add` does by default).
+// nuxt.config (what `nuxi module add` does by default). Several modules go
+// into a single `nuxi module add`.
 func (*Nuxt) Actions() []provider.Action {
 	return []provider.Action{
-		{Label: "install", Commands: func(p provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
-			return nuxiAdd(p.ID, v, proj, "--skipConfig")
+		{Label: "install", Commands: func(ps []provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
+			return nuxiAdd(ids(ps), v, proj, "--skipConfig")
 		}},
-		{Label: "install + enable", Enables: true, Commands: func(p provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
-			return nuxiAdd(p.ID, v, proj)
+		{Label: "install + enable", Enables: true, Commands: func(ps []provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
+			return nuxiAdd(ids(ps), v, proj)
 		}},
 	}
+}
+
+func ids(ps []provider.Package) []string {
+	out := make([]string, len(ps))
+	for i, p := range ps {
+		out[i] = p.ID
+	}
+	return out
 }
 
 func (*Nuxt) InstallHint(p provider.Package, version string) string {
@@ -121,17 +130,24 @@ func spec(npm, version string) string {
 	return npm
 }
 
-func nuxiAdd(npm, version string, proj provider.Project, flags ...string) ([]*exec.Cmd, error) {
-	if proj.Root == "" {
-		return nil, fmt.Errorf("no Nuxt project (package.json depending on nuxt) found from the current directory; run: npx nuxi@latest module add %s", spec(npm, version))
+func nuxiAdd(npms []string, version string, proj provider.Project, flags ...string) ([]*exec.Cmd, error) {
+	if len(npms) == 0 {
+		return nil, fmt.Errorf("no modules to install")
 	}
-	if !validNpm.MatchString(npm) {
-		return nil, fmt.Errorf("invalid package name %q", npm)
+	if proj.Root == "" {
+		return nil, fmt.Errorf("no Nuxt project (package.json depending on nuxt) found from the current directory; run: npx nuxi@latest module add %s", spec(npms[0], version))
 	}
 	if !validVersion.MatchString(version) {
 		return nil, fmt.Errorf("invalid version %q", version)
 	}
-	args := append([]string{"module", "add", spec(npm, version)}, flags...)
+	args := []string{"module", "add"}
+	for _, npm := range npms {
+		if !validNpm.MatchString(npm) {
+			return nil, fmt.Errorf("invalid package name %q", npm)
+		}
+		args = append(args, spec(npm, version))
+	}
+	args = append(args, flags...)
 	c := runner(proj.Data["pm"], args...)
 	c.Dir = proj.Root
 	return []*exec.Cmd{c}, nil

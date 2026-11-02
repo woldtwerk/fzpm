@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"image"
 	"os"
+	"os/exec"
+	"sort"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -76,9 +78,12 @@ type Model struct {
 	// enabledNow holds modules enabled in this session (provider/module);
 	// project files only reflect that after a config export.
 	enabledNow map[string]bool
-	results    []provider.Package
-	cursor     int
-	offset     int
+	// marked holds rows selected for a batch install/enable (key -> row).
+	// Rows of the current tab only; switching tabs clears it.
+	marked  map[string]provider.Package
+	results []provider.Package
+	cursor  int
+	offset  int
 
 	input  textinput.Model
 	insert bool
@@ -160,6 +165,7 @@ func New(svc *app.Service, provs []provider.Provider, opts Options) *Model {
 		showImages:  opts.ImageMode != img.Off,
 		kittySent:   map[uint32]bool{},
 		enabledNow:  map[string]bool{},
+		marked:      map[string]provider.Package{},
 		prefetchSem: make(chan struct{}, prefetchParallel),
 		relCursor:   -1,
 		width:       80,
@@ -217,10 +223,12 @@ type (
 		img image.Image // nil when it could not be loaded
 	}
 	execDoneMsg struct {
-		label   string
-		pkg     provider.Package
-		err     error
-		enabled string // module enabled by this action, if any
+		label string
+		what  string // package names, for the status line
+		err   error
+		// enabled lists modules turned on by this action (ID = local module).
+		enabled []provider.Package
+		batch   bool // ran for the marked rows
 	}
 	statusMsg struct {
 		text string
@@ -494,11 +502,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case execDoneMsg:
 		if msg.err != nil {
-			m.setStatus(fmt.Sprintf("✗ %s %s failed: %v", msg.label, msg.pkg.ID, msg.err), true)
+			m.setStatus(fmt.Sprintf("✗ %s %s failed: %v", msg.label, msg.what, msg.err), true)
 		} else {
-			m.setStatus(fmt.Sprintf("✓ %s: %s", msg.label, msg.pkg.ID), false)
-			if msg.enabled != "" {
-				m.enabledNow[msg.pkg.Provider+"/"+msg.enabled] = true
+			m.setStatus(fmt.Sprintf("✓ %s: %s", msg.label, msg.what), false)
+			for _, p := range msg.enabled {
+				m.enabledNow[key(p)] = true
+			}
+			if msg.batch { // keep the selection on failure so it can be retried
+				clear(m.marked)
 			}
 		}
 		return m, m.loadLocal()
@@ -689,8 +700,11 @@ func (m *Model) openDetail(p provider.Package) tea.Cmd {
 }
 
 // runAction executes action n (0 = install, 1 = install + enable) for the
-// selected package.
+// marked rows, or else the selected package.
 func (m *Model) runAction(n int) tea.Cmd {
+	if m.screen == screenList && len(m.markedRows()) > 0 {
+		return m.runMarked(n)
+	}
 	if cmd, handled := m.localAction(); handled {
 		return cmd
 	}
@@ -705,19 +719,115 @@ func (m *Model) runAction(n int) tea.Cmd {
 		return nil
 	}
 	a := actions[n]
-	cmds, err := a.Commands(pkg, m.selectedConstraint(), m.projects[prov.Name()])
+	cmds, err := a.Commands([]provider.Package{pkg}, m.selectedConstraint(), m.projects[prov.Name()])
 	if err != nil {
 		m.setStatus(err.Error(), true)
 		return nil
 	}
-	m.setStatus(a.Label+" "+pkg.ID+"…", false)
-	enabled := ""
+	var enabled []provider.Package
 	if a.Enables {
-		enabled = pkg.ID
+		enabled = []provider.Package{pkg}
 	}
+	return m.execute(a.Label, cmds, []provider.Package{pkg}, enabled, false)
+}
+
+// runMarked runs action n for all marked rows: on Search one batched
+// action per provider, on the local tabs enabling the uninstalled ones.
+func (m *Model) runMarked(n int) tea.Cmd {
+	rows := m.markedRows()
+	if m.tab != tabSearch {
+		var lps []provider.LocalPackage
+		for _, r := range rows {
+			if lp, ok := m.localByKey[key(r)]; ok && !lp.Enabled {
+				lps = append(lps, lp)
+			}
+		}
+		if len(lps) == 0 {
+			m.setStatus("the selected modules are already installed", false)
+			return nil
+		}
+		return m.enableLocal(lps, true)
+	}
+	var all []*exec.Cmd
+	var enabled []provider.Package
+	label := ""
+	for _, prov := range m.provs {
+		var group []provider.Package
+		for _, r := range rows {
+			if r.Provider == prov.Name() {
+				group = append(group, r)
+			}
+		}
+		if len(group) == 0 {
+			continue
+		}
+		actions := prov.Actions()
+		if n >= len(actions) {
+			m.setStatus(fmt.Sprintf("%s has no action %d", prov.Name(), n+1), true)
+			return nil
+		}
+		a := actions[n]
+		cmds, err := a.Commands(group, "", m.projects[prov.Name()])
+		if err != nil {
+			m.setStatus(err.Error(), true)
+			return nil
+		}
+		all = append(all, cmds...)
+		label = a.Label
+		if a.Enables {
+			enabled = append(enabled, group...)
+		}
+	}
+	return m.execute(label, all, rows, enabled, true)
+}
+
+// execute hands the terminal to cmds and reports back with execDoneMsg.
+func (m *Model) execute(label string, cmds []*exec.Cmd, pkgs, enabled []provider.Package, batch bool) tea.Cmd {
+	ids := make([]string, len(pkgs))
+	for i, p := range pkgs {
+		ids[i] = p.ID
+	}
+	what := strings.Join(ids, ", ")
+	m.setStatus(label+" "+what+"…", false)
 	return tea.Exec(&runner.Seq{Cmds: cmds}, func(err error) tea.Msg {
-		return execDoneMsg{label: a.Label, pkg: pkg, err: err, enabled: enabled}
+		return execDoneMsg{label: label, what: what, err: err, enabled: enabled, batch: batch}
 	})
+}
+
+// toggleMark selects/deselects the row under the cursor for a batch action,
+// optionally moving down a line.
+func (m *Model) toggleMark(down bool) tea.Cmd {
+	if m.cursor >= len(m.results) {
+		return nil
+	}
+	p := m.results[m.cursor]
+	k := key(p)
+	if lp, ok := m.localByKey[k]; ok && m.tab != tabSearch && lp.Enabled {
+		m.setStatus(lp.Module+" is already installed", false)
+		return nil
+	}
+	if _, ok := m.marked[k]; ok {
+		delete(m.marked, k)
+	} else {
+		m.marked[k] = p
+	}
+	if !down {
+		return nil
+	}
+	m.move(1)
+	return m.schedulePrefetch()
+}
+
+// markedRows returns the marked rows of active providers, sorted.
+func (m *Model) markedRows() []provider.Package {
+	rows := make([]provider.Package, 0, len(m.marked))
+	for _, p := range m.marked {
+		if m.provider(p.Provider) != nil {
+			rows = append(rows, p)
+		}
+	}
+	sort.Slice(rows, func(i, j int) bool { return key(rows[i]) < key(rows[j]) })
+	return rows
 }
 
 func (m *Model) selectedConstraint() string {

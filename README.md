@@ -17,6 +17,13 @@ based; included providers:
 Inside a project the matching provider is enabled automatically; elsewhere
 fzpm asks which one to search (single key).
 
+**Multi-select**: `Space` marks a row (`Ctrl-Space` while typing), `Tab` marks
+it and moves down a line. Marks are kept while you change the query. `i`
+installs, `e` installs and enables (`Alt-i` / `Alt-e` while typing) all marked
+rows with one batched command per plugin (e.g.
+`composer require drupal/a drupal/b` + `drush en a b -y`, or
+`nuxi module add a b`). On *Uninstalled*, they enable all selected modules. `Esc` clears the marks, and so does switching tabs.
+
 **Plugins pane** (`,`; `Alt-,` while typing): `Space` enables/disables a
 provider (saved in `~/.config/fzpm/config.json`; disabled providers
 are never used), `⏎` uses an enabled provider in the current session only

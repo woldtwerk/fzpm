@@ -2,12 +2,12 @@ package ui
 
 import (
 	"fmt"
+	"os/exec"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
 	"fzpm/internal/provider"
-	"fzpm/internal/runner"
 )
 
 type tab int
@@ -132,6 +132,7 @@ func (m *Model) setTab(t tab) tea.Cmd {
 	}
 	m.tab = t
 	m.cursor, m.offset = 0, 0
+	clear(m.marked) // marks are per tab (search rows vs. local modules)
 	m.updatePlaceholder()
 	m.refilter(false)
 	return m.schedulePrefetch()
@@ -175,17 +176,36 @@ func (m *Model) localAction() (tea.Cmd, bool) {
 		m.setStatus(lp.Module+" is already installed", false)
 		return nil, true
 	}
-	prov := m.provider(lp.Provider)
-	cmds, err := prov.(provider.Lister).EnableCommands(lp, m.projects[prov.Name()])
-	if err != nil {
-		m.setStatus(err.Error(), true)
-		return nil, true
+	return m.enableLocal([]provider.LocalPackage{lp}, false), true
+}
+
+// enableLocal enables present packages, one batched command per provider.
+func (m *Model) enableLocal(lps []provider.LocalPackage, batch bool) tea.Cmd {
+	var all []*exec.Cmd
+	var pkgs []provider.Package
+	for _, prov := range m.provs {
+		lister, ok := prov.(provider.Lister)
+		if !ok {
+			continue
+		}
+		var group []provider.LocalPackage
+		for _, lp := range lps {
+			if lp.Provider == prov.Name() {
+				group = append(group, lp)
+				pkgs = append(pkgs, provider.Package{Provider: lp.Provider, ID: lp.Module})
+			}
+		}
+		if len(group) == 0 {
+			continue
+		}
+		cmds, err := lister.EnableCommands(group, m.projects[prov.Name()])
+		if err != nil {
+			m.setStatus(err.Error(), true)
+			return nil
+		}
+		all = append(all, cmds...)
 	}
-	m.setStatus("enabling "+lp.Module+"…", false)
-	pkg := provider.Package{Provider: lp.Provider, ID: lp.Module}
-	return tea.Exec(&runner.Seq{Cmds: cmds}, func(err error) tea.Msg {
-		return execDoneMsg{label: "enable", pkg: pkg, err: err, enabled: lp.Module}
-	}), true
+	return m.execute("enable", all, pkgs, pkgs, batch)
 }
 
 func (m *Model) tabBar() string {

@@ -79,22 +79,27 @@ func shortPath(p string) string {
 	return p
 }
 
-// Actions: [0] composer require, [1] composer require + drush en.
+// Actions: [0] composer require, [1] composer require + drush en. Several
+// modules go into a single composer require and a single drush en.
 func (Drupal) Actions() []provider.Action {
 	return []provider.Action{
-		{Label: "install", Commands: func(p provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
-			req, err := requireCmd(p, v, proj)
+		{Label: "install", Commands: func(ps []provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
+			req, err := requireCmd(ps, v, proj)
 			if err != nil {
 				return nil, err
 			}
 			return []*exec.Cmd{req}, nil
 		}},
-		{Label: "install + enable", Enables: true, Commands: func(p provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
-			req, err := requireCmd(p, v, proj)
+		{Label: "install + enable", Enables: true, Commands: func(ps []provider.Package, v string, proj provider.Project) ([]*exec.Cmd, error) {
+			req, err := requireCmd(ps, v, proj)
 			if err != nil {
 				return nil, err
 			}
-			return []*exec.Cmd{req, drushCmd(proj, "en", p.ID, "-y")}, nil
+			ids := make([]string, len(ps))
+			for i, p := range ps {
+				ids[i] = p.ID
+			}
+			return []*exec.Cmd{req, drushEn(proj, ids)}, nil
 		}},
 	}
 }
@@ -111,21 +116,33 @@ func requireString(id, version string) string {
 	return "composer require '" + pkg + "'"
 }
 
-func requireCmd(p provider.Package, version string, proj provider.Project) (*exec.Cmd, error) {
-	if proj.Root == "" {
-		return nil, fmt.Errorf("no Drupal project (composer.json requiring drupal/core) found from the current directory; run: %s", requireString(p.ID, version))
+func requireCmd(ps []provider.Package, version string, proj provider.Project) (*exec.Cmd, error) {
+	if len(ps) == 0 {
+		return nil, fmt.Errorf("no modules to install")
 	}
-	if !validID.MatchString(p.ID) {
-		return nil, fmt.Errorf("invalid module name %q", p.ID)
+	if proj.Root == "" {
+		return nil, fmt.Errorf("no Drupal project (composer.json requiring drupal/core) found from the current directory; run: %s", requireString(ps[0].ID, version))
 	}
 	if !validConstraint.MatchString(version) {
 		return nil, fmt.Errorf("invalid version constraint %q", version)
 	}
-	pkg := "drupal/" + p.ID
-	if version != "" {
-		pkg += ":" + version
+	args := []string{"require"}
+	for _, p := range ps {
+		if !validID.MatchString(p.ID) {
+			return nil, fmt.Errorf("invalid module name %q", p.ID)
+		}
+		pkg := "drupal/" + p.ID
+		if version != "" {
+			pkg += ":" + version
+		}
+		args = append(args, pkg)
 	}
-	return tool(proj, "composer", "require", pkg), nil
+	return tool(proj, "composer", args...), nil
+}
+
+// drushEn enables modules (validated by the caller).
+func drushEn(proj provider.Project, modules []string) *exec.Cmd {
+	return drushCmd(proj, append(append([]string{"en"}, modules...), "-y")...)
 }
 
 func drushCmd(proj provider.Project, args ...string) *exec.Cmd {

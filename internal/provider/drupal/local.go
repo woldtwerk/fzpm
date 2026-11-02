@@ -268,11 +268,16 @@ func scanInfo(ctx context.Context, dir string, fn func(path string, info infoFil
 	})
 }
 
-// EnableCommands enables (in Drupal terms: installs) a present module.
-// Unlike listing, this needs a running site (drush, via ddev if present).
-func (Drupal) EnableCommands(lp provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
-	if !validID.MatchString(lp.Module) {
-		return nil, fmt.Errorf("invalid module name %q", lp.Module)
+// EnableCommands enables (in Drupal terms: installs) present modules with a
+// single drush en. Unlike listing, this needs a running site (drush, via
+// ddev if present).
+func (Drupal) EnableCommands(lps []provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
+	modules := make([]string, len(lps))
+	for i, lp := range lps {
+		if !validID.MatchString(lp.Module) {
+			return nil, fmt.Errorf("invalid module name %q", lp.Module)
+		}
+		modules[i] = lp.Module
 	}
-	return []*exec.Cmd{drushCmd(proj, "en", lp.Module, "-y")}, nil
+	return []*exec.Cmd{drushEn(proj, modules)}, nil
 }

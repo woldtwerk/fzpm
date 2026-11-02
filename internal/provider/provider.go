@@ -78,9 +78,12 @@ type Action struct {
 	// Enables marks actions that also enable the package in the project, so
 	// the UI can show it as installed before the project files catch up.
 	Enables bool
-	// Commands returns the commands to run in order. version may be empty
-	// (latest). It must not use a shell.
-	Commands func(p Package, version string, proj Project) ([]*exec.Cmd, error)
+	// Commands returns the commands to run in order for one or more packages
+	// of this provider (several when the user selected multiple rows, so the
+	// provider can batch them into one install). version may be empty
+	// (latest); the UI only sets it for a single package. It must not use a
+	// shell.
+	Commands func(ps []Package, version string, proj Project) ([]*exec.Cmd, error)
 }
 
 // Provider is a package source.
@@ -127,8 +130,8 @@ type Lister interface {
 	// Local should work from project files; c is available for registry
 	// lookups (e.g. which dependencies are modules at all).
 	Local(ctx context.Context, c *http.Client, proj Project) ([]LocalPackage, error)
-	// EnableCommands turns a present but uninstalled package on.
-	EnableCommands(lp LocalPackage, proj Project) ([]*exec.Cmd, error)
+	// EnableCommands turns one or more present but uninstalled packages on.
+	EnableCommands(lps []LocalPackage, proj Project) ([]*exec.Cmd, error)
 }
 
 var (

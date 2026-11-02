@@ -91,7 +91,7 @@ func TestDetectAndActions(t *testing.T) {
 	if !ok || proj.Root != root || proj.Data["ddev"] == "" {
 		t.Fatalf("detect = %+v, %v", proj, ok)
 	}
-	cmds, err := d.Actions()[1].Commands(provider.Package{ID: "token"}, "^1.18", proj)
+	cmds, err := d.Actions()[1].Commands([]provider.Package{{ID: "token"}}, "^1.18", proj)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,18 @@ func TestDetectAndActions(t *testing.T) {
 		t.Errorf("cmds = %v (dir %s), want %v", got, cmds[0].Dir, want)
 	}
 
-	if _, err := d.Actions()[0].Commands(provider.Package{ID: "token; rm -rf /"}, "", proj); err == nil {
+	cmds, _ = d.Actions()[1].Commands([]provider.Package{{ID: "token"}, {ID: "pathauto"}}, "", proj)
+	got = []string{strings.Join(cmds[0].Args, " "), strings.Join(cmds[1].Args, " ")}
+	want = []string{"ddev composer require drupal/token drupal/pathauto", "ddev drush en token pathauto -y"}
+	if len(cmds) != 2 || got[0] != want[0] || got[1] != want[1] {
+		t.Errorf("batch cmds = %v, want %v", got, want)
+	}
+	cmds, _ = d.EnableCommands([]provider.LocalPackage{{Module: "token"}, {Module: "token_view"}}, proj)
+	if got := strings.Join(cmds[0].Args, " "); got != "ddev drush en token token_view -y" {
+		t.Errorf("batch enable = %q", got)
+	}
+
+	if _, err := d.Actions()[0].Commands([]provider.Package{{ID: "token"}, {ID: "token; rm -rf /"}}, "", proj); err == nil {
 		t.Error("expected invalid name error")
 	}
 	if _, ok := d.Detect(t.TempDir()); ok {

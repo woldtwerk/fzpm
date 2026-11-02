@@ -74,6 +74,11 @@ func (m *Model) listView() string {
 		if i == m.cursor {
 			marker = accent.Render("▌ ")
 		}
+		if _, ok := m.marked[key(p)]; ok {
+			marker += okStyle.Render("✓") + " "
+		} else {
+			marker += "  "
+		}
 		line := marker
 		if multi {
 			line += m.providerTag(p.Provider)
@@ -142,6 +147,9 @@ func (m *Model) footer() string {
 	}
 	if m.screen == screenList {
 		parts = append(parts, dim.Render(fmt.Sprintf("%d/%d", min(len(m.results), m.cursor+1), len(m.results))))
+		if n := len(m.markedRows()); n > 0 {
+			parts = append(parts, okStyle.Render(fmt.Sprintf("✓ %d selected", n)))
+		}
 	} else if v := m.selectedConstraint(); v != "" {
 		parts = append(parts, accent.Render("version "+v))
 	}
@@ -163,11 +171,11 @@ func (m *Model) footer() string {
 func (m *Model) hint() string {
 	switch {
 	case m.screen == screenDetail:
-		return "i install  I +enable  n/N version  ]r releases  r reload  h back  ? help"
+		return "i install  e +enable  n/N version  ]r releases  r reload  h back  ? help"
 	case m.insert:
-		return "⏎ details  M-i install  M-I +enable  esc normal  ? (normal) help"
+		return "⏎ details  tab mark  M-i install  M-e +enable  esc normal  ? (normal) help"
 	default:
-		return "i install  I +enable  l details  / search  r refresh  , plugins  ? help"
+		return "i install  e +enable  ␣/tab mark  l details  / search  r refresh  , plugins  ? help"
 	}
 }
 
@@ -176,15 +184,19 @@ const helpText = `fzpm — keys
  SEARCH (insert mode, default)
    type             fuzzy filter (remote search kicks in after a pause)
    ⏎                open details            ctrl-n/p, ctrl-j/k  move
-   alt-i            install                 alt-I               install + enable
+   alt-i            install                 alt-e, alt-I        install + enable
    alt-y            yank install command    alt-o               open in browser
-   esc              normal mode
+   tab              mark row + move down    ctrl-space          mark row
+   esc              clear marks, else normal mode
 
  LIST (normal mode)
    j/k              down/up                 gg/G                top/bottom
    ctrl-d/u         half page               ctrl-f/b            page
    H/L              top/bottom of screen    l, ⏎                details
-   i                install                 I                   install + enable
+   i                install                 e, I                install + enable
+   space            mark row                tab                 mark row + move down
+                    (i / e then act on all marked rows)
+   esc              clear marks
    y                yank command            o                   open in browser
    /, a             search (insert)         S                   clear & search
    1/2/3, gt/gT     tabs: search / installed / uninstalled (alt-1..3 in insert)
@@ -198,7 +210,7 @@ const helpText = `fzpm — keys
    gg/G             top/bottom              ]r / [r             releases / top
    J/K              scroll sidebar
    n/N              select next/prev release (install uses its version)
-   i / I            install / + enable      p                   toggle images
+   i / e            install / + enable      p                   toggle images
    r                reload from source      y, o                yank, open
    h, esc, q        back
 

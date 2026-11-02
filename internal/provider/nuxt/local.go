@@ -134,7 +134,11 @@ func configModules(root string) map[string]bool {
 	return out
 }
 
-// EnableCommands registers an installed module in nuxt.config.
-func (*Nuxt) EnableCommands(lp provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
-	return nuxiAdd(lp.Module, "", proj, "--skipInstall")
+// EnableCommands registers installed modules in nuxt.config.
+func (*Nuxt) EnableCommands(lps []provider.LocalPackage, proj provider.Project) ([]*exec.Cmd, error) {
+	modules := make([]string, len(lps))
+	for i, lp := range lps {
+		modules[i] = lp.Module
+	}
+	return nuxiAdd(modules, "", proj, "--skipInstall")
 }

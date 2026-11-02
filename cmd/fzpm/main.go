@@ -156,7 +156,7 @@ func installDirect(provs []provider.Provider, dir, id string, action int) error 
 		if action >= len(actions) {
 			return fmt.Errorf("%s has no action %d", p.Name(), action+1)
 		}
-		cmds, err := actions[action].Commands(provider.Package{Provider: p.Name(), ID: id}, "", proj)
+		cmds, err := actions[action].Commands([]provider.Package{{Provider: p.Name(), ID: id}}, "", proj)
 		if err != nil {
 			return err
 		}

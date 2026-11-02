@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os/exec"
 	"path/filepath"
@@ -46,9 +47,14 @@ func (fake) Detect(string) (provider.Project, bool) {
 	return provider.Project{Root: "/tmp", Label: "fake: /tmp"}, true
 }
 func (fake) Actions() []provider.Action {
-	return []provider.Action{{Label: "install", Commands: func(p provider.Package, v string, _ provider.Project) ([]*exec.Cmd, error) {
-		return []*exec.Cmd{exec.Command("true", p.ID, v)}, nil
-	}}}
+	cmds := func(ps []provider.Package, v string, _ provider.Project) ([]*exec.Cmd, error) {
+		args := []string{v}
+		for _, p := range ps {
+			args = append(args, p.ID)
+		}
+		return []*exec.Cmd{exec.Command("true", args...)}, nil
+	}
+	return []provider.Action{{Label: "install", Commands: cmds}, {Label: "install + enable", Enables: true, Commands: cmds}}
 }
 func (fake) InstallHint(p provider.Package, v string) string { return "fake add " + p.ID }
 
@@ -58,6 +64,8 @@ func press(s string) tea.KeyMsg {
 		return tea.KeyMsg{Type: tea.KeyEnter}
 	case "esc":
 		return tea.KeyMsg{Type: tea.KeyEsc}
+	case "tab":
+		return tea.KeyMsg{Type: tea.KeyTab}
 	}
 	return tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(s)}
 }
@@ -172,8 +180,12 @@ func (fake) Local(context.Context, *http.Client, provider.Project) ([]provider.L
 		{Package: provider.Package{Provider: "fake", Name: "Mine"}, Module: "mine", Origin: "custom"},
 	}, nil
 }
-func (fake) EnableCommands(lp provider.LocalPackage, _ provider.Project) ([]*exec.Cmd, error) {
-	return []*exec.Cmd{exec.Command("true", "enable", lp.Module)}, nil
+func (fake) EnableCommands(lps []provider.LocalPackage, _ provider.Project) ([]*exec.Cmd, error) {
+	args := []string{"enable"}
+	for _, lp := range lps {
+		args = append(args, lp.Module)
+	}
+	return []*exec.Cmd{exec.Command("true", args...)}, nil
 }
 
 func TestTabs(t *testing.T) {
@@ -214,12 +226,13 @@ func TestTabs(t *testing.T) {
 			m.cursor = i
 		}
 	}
-	if _, cmd := m.Update(press("I")); cmd == nil || !strings.Contains(m.status, "enabling lodash_fp") {
+	if _, cmd := m.Update(press("I")); cmd == nil || !strings.Contains(m.status, "enable lodash_fp") {
 		t.Errorf("enable: cmd=%v status=%q", cmd != nil, m.status)
 	}
 	// After a successful enable it moves to Installed, even though the project
 	// files (core.extension.yml) only change after a config export.
-	_, cmd := m.Update(execDoneMsg{label: "enable", pkg: provider.Package{Provider: "fake", ID: "lodash_fp"}, enabled: "lodash_fp"})
+	lodashFP := provider.Package{Provider: "fake", ID: "lodash_fp"}
+	_, cmd := m.Update(execDoneMsg{label: "enable", what: "lodash_fp", enabled: []provider.Package{lodashFP}})
 	drain(t, m, cmd, 0)
 	if m.count(tabInstalled) != 2 || m.count(tabUninstalled) != 1 {
 		t.Errorf("after enable: installed=%d uninstalled=%d", m.count(tabInstalled), m.count(tabUninstalled))
@@ -421,3 +434,116 @@ func TestRefreshSearchList(t *testing.T) {
 		t.Errorf("after r: runs=%d status=%q indexing=%d", runs, m2.status, m2.indexing)
 	}
 }
+
+func TestMultiSelect(t *testing.T) {
+	store, _ := cache.OpenDir(t.TempDir())
+	m := New(app.New(store, "test"), []provider.Provider{fake{}}, Options{ImageMode: img.Off, Dir: "/"})
+	m.Update(tea.WindowSizeMsg{Width: 120, Height: 30})
+	drain(t, m, m.Init(), 0)
+	m.Update(press("esc"))
+
+	// space marks without moving, tab marks and moves down.
+	m.Update(press(" "))
+	if m.cursor != 0 || len(m.marked) != 1 {
+		t.Fatalf("after space: cursor=%d marked=%d", m.cursor, len(m.marked))
+	}
+	m.Update(press(" "))
+	if m.cursor != 0 || len(m.marked) != 0 {
+		t.Fatalf("second space did not unmark: cursor=%d marked=%d", m.cursor, len(m.marked))
+	}
+	m.Update(press("tab"))
+	if m.cursor != 1 || len(m.marked) != 1 {
+		t.Fatalf("after tab: cursor=%d marked=%d", m.cursor, len(m.marked))
+	}
+	m.Update(press(" "))
+	if v := m.View(); !strings.Contains(v, "✓ 2 selected") {
+		t.Errorf("selection count missing:\n%s", v)
+	}
+	if v := m.View(); !strings.Contains(v, "▌ ✓ ") || !strings.Contains(v, "  ✓ ") {
+		t.Errorf("marker spacing missing (want \"▌ ✓ name\"):\n%s", v)
+	}
+	// Marks survive a new query; alt-i acts on them while typing.
+	m.Update(press("/"))
+	m.Update(press("x"))
+	if len(m.markedRows()) != 2 {
+		t.Fatalf("marks lost on query change: %d", len(m.markedRows()))
+	}
+	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i"), Alt: true}); cmd == nil || !strings.HasPrefix(m.status, "install left-pad, lodash") {
+		t.Fatalf("alt-i: cmd=%v status=%q", cmd != nil, m.status)
+	}
+	// e (normal mode) runs install + enable for all marked rows.
+	m.insert = false
+	_, cmd := m.Update(press("e"))
+	if cmd == nil || !strings.Contains(m.status, "install + enable left-pad, lodash") {
+		t.Fatalf("batch install: cmd=%v status=%q", cmd != nil, m.status)
+	}
+	// A failure keeps the selection, success clears it and records enables.
+	m.Update(execDoneMsg{label: "install", what: "left-pad, lodash", err: errTest, batch: true})
+	if len(m.marked) != 2 {
+		t.Fatal("selection cleared on failure")
+	}
+	_, cmd = m.Update(execDoneMsg{label: "install + enable", what: "left-pad, lodash", batch: true,
+		enabled: []provider.Package{{Provider: "fake", ID: "left-pad"}}})
+	drain(t, m, cmd, 0)
+	if len(m.marked) != 0 || !m.enabledNow["fake/left-pad"] {
+		t.Errorf("after success: marked=%d enabledNow=%v", len(m.marked), m.enabledNow)
+	}
+
+	// Clear the query so all rows show again.
+	m.Update(press("S"))
+	m.Update(press("esc"))
+	if len(m.results) != 2 {
+		t.Fatalf("results after clearing query = %d", len(m.results))
+	}
+
+	// tab marks while typing too; the first esc only clears the marks.
+	m.Update(press("/"))
+	m.cursor = 0
+	first := key(m.results[0])
+	m.Update(press("tab"))
+	if _, ok := m.marked[first]; !ok || len(m.marked) != 1 || m.input.Value() != "" {
+		t.Fatalf("tab in insert: marked=%v query=%q", m.marked, m.input.Value())
+	}
+	m.Update(press("esc"))
+	if len(m.marked) != 0 || !m.insert {
+		t.Fatalf("esc in insert: marked=%d insert=%v", len(m.marked), m.insert)
+	}
+	m.Update(press("esc"))
+	if m.insert {
+		t.Fatal("second esc did not switch to normal mode")
+	}
+
+	// tab again unmarks; esc (normal) clears; tab switch clears.
+	m.cursor = 0
+	m.Update(press("tab"))
+	m.cursor = 0
+	m.Update(press("tab"))
+	if len(m.marked) != 0 {
+		t.Error("second space did not unmark")
+	}
+	m.Update(press("tab"))
+	m.Update(press("esc"))
+	if len(m.marked) != 0 {
+		t.Error("esc did not clear selection")
+	}
+
+	// Uninstalled tab: marked modules are enabled in one go; installed
+	// modules cannot be marked.
+	m.Update(press("3"))
+	for range m.results {
+		m.Update(press("tab"))
+	}
+	if _, cmd := m.Update(press("i")); cmd == nil || !strings.Contains(m.status, "enable lodash_fp, mine") {
+		t.Errorf("batch enable: cmd=%v status=%q", cmd != nil, m.status)
+	}
+	m.Update(press("2"))
+	if len(m.marked) != 0 {
+		t.Error("tab switch did not clear selection")
+	}
+	m.Update(press("tab"))
+	if len(m.marked) != 0 || !strings.Contains(m.status, "already installed") {
+		t.Errorf("installed module marked: status=%q", m.status)
+	}
+}
+
+var errTest = errors.New("boom")

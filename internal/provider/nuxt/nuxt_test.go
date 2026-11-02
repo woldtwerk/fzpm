@@ -32,18 +32,22 @@ func TestDetectAndActions(t *testing.T) {
 	if !ok || proj.Root != root || proj.Data["pm"] != "pnpm" {
 		t.Fatalf("detect = %+v %v", proj, ok)
 	}
-	cmds, err := n.Actions()[0].Commands(provider.Package{ID: "@nuxt/image"}, "^2.2.1", proj)
+	cmds, err := n.Actions()[0].Commands([]provider.Package{{ID: "@nuxt/image"}}, "^2.2.1", proj)
 	if err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(cmds[0].Args, " "); got != "pnpm dlx nuxi@latest module add @nuxt/image@^2.2.1 --skipConfig" || cmds[0].Dir != root {
 		t.Errorf("install cmd = %q", got)
 	}
-	cmds, _ = n.Actions()[1].Commands(provider.Package{ID: "@nuxt/image"}, "", proj)
+	cmds, _ = n.Actions()[1].Commands([]provider.Package{{ID: "@nuxt/image"}}, "", proj)
 	if got := strings.Join(cmds[0].Args, " "); got != "pnpm dlx nuxi@latest module add @nuxt/image" {
 		t.Errorf("install+enable cmd = %q", got)
 	}
-	if _, err := n.Actions()[0].Commands(provider.Package{ID: "x; rm -rf /"}, "", proj); err == nil {
+	cmds, _ = n.Actions()[1].Commands([]provider.Package{{ID: "@nuxt/image"}, {ID: "@nuxt/ui"}}, "", proj)
+	if got := strings.Join(cmds[0].Args, " "); len(cmds) != 1 || got != "pnpm dlx nuxi@latest module add @nuxt/image @nuxt/ui" {
+		t.Errorf("batch cmd = %q", got)
+	}
+	if _, err := n.Actions()[0].Commands([]provider.Package{{ID: "@nuxt/ui"}, {ID: "x; rm -rf /"}}, "", proj); err == nil {
 		t.Error("expected invalid name error")
 	}
 	if _, ok := n.Detect(t.TempDir()); ok {

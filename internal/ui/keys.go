@@ -71,6 +71,10 @@ func (m *Model) handleSeq(seq string) (tea.Model, tea.Cmd) {
 func (m *Model) insertKey(k string, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch k {
 	case "esc":
+		if len(m.marked) > 0 { // first esc ends the multi-selection
+			clear(m.marked)
+			return m, nil
+		}
 		m.insert = false
 		m.input.Blur()
 		return m, nil
@@ -78,7 +82,7 @@ func (m *Model) insertKey(k string, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.openSelected()
 	case "alt+1", "alt+2", "alt+3":
 		return m, m.setTab(tab(k[4] - '1'))
-	case "down", "ctrl+n", "ctrl+j", "tab":
+	case "down", "ctrl+n", "ctrl+j":
 		m.move(1)
 		return m, m.schedulePrefetch()
 	case "up", "ctrl+p", "ctrl+k", "shift+tab":
@@ -92,8 +96,12 @@ func (m *Model) insertKey(k string, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.schedulePrefetch()
 	case "alt+i":
 		return m, m.runAction(0)
-	case "alt+I":
+	case "alt+e", "alt+I":
 		return m, m.runAction(1)
+	case "tab":
+		return m, m.toggleMark(true)
+	case "ctrl+@": // ctrl+space
+		return m, m.toggleMark(false)
 	case "alt+,":
 		m.openSettings()
 		return m, nil
@@ -154,8 +162,15 @@ func (m *Model) normalKey(k string) (tea.Model, tea.Cmd) {
 		return m, m.refreshList()
 	case "i":
 		return m, m.runAction(0)
-	case "I":
+	case "e", "I":
 		return m, m.runAction(1)
+	case " ", "ctrl+@":
+		return m, m.toggleMark(false)
+	case "tab":
+		return m, m.toggleMark(true)
+	case "esc":
+		clear(m.marked)
+		return m, nil
 	case "y":
 		return m, m.yank()
 	case "o":
@@ -199,7 +214,7 @@ func (m *Model) detailKey(k string, msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, m.moveRelease(-1)
 	case "i", "alt+i":
 		return m, m.runAction(0)
-	case "I", "alt+I":
+	case "e", "I", "alt+e", "alt+I":
 		return m, m.runAction(1)
 	case "y":
 		return m, m.yank()
